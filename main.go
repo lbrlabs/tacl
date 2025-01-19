@@ -10,9 +10,11 @@ import (
 	"github.com/lbrlabs/tacl/pkg/acl/autoapprovers"
 	"github.com/lbrlabs/tacl/pkg/acl/derpmap"
 	"github.com/lbrlabs/tacl/pkg/acl/groups"
+	"github.com/lbrlabs/tacl/pkg/acl/hosts"
 	nodeattrs "github.com/lbrlabs/tacl/pkg/acl/nodeattributes"
 	"github.com/lbrlabs/tacl/pkg/acl/settings"
 	"github.com/lbrlabs/tacl/pkg/acl/ssh"
+	"github.com/lbrlabs/tacl/pkg/acl/postures"
 	"github.com/lbrlabs/tacl/pkg/common"
 	"go.uber.org/zap"
 )
@@ -63,6 +65,9 @@ func main() {
 	ssh.RegisterRoutes(r, state)
 	settings.RegisterRoutes(r, state)
 	nodeattrs.RegisterRoutes(r, state)
+	hosts.RegisterRoutes(r, state)
+	postures.RegisterRoutes(r, state)
+
 
 	// Optional: debug route to dump the entire state
 	r.GET("/state", func(c *gin.Context) {
