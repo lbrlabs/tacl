@@ -12,13 +12,13 @@ import (
 // Posture represents a named "posture" entry and its list of rules.
 // Example JSON when creating/updating:
 //
-//   {
-//     "name": "latestMac",
-//     "rules": [
-//       "node:os in ['macos']",
-//       "node:tsVersion >= '1.40'"
-//     ]
-//   }
+//	{
+//	  "name": "latestMac",
+//	  "rules": [
+//	    "node:os in ['macos']",
+//	    "node:tsVersion >= '1.40'"
+//	  ]
+//	}
 type Posture struct {
 	Name  string   `json:"name" binding:"required"`
 	Rules []string `json:"rules"`
@@ -74,13 +74,14 @@ func RegisterRoutes(r *gin.Engine, state *common.State) {
 
 // listAllPostures => GET /postures
 // Returns a JSON object containing:
-// {
-//   "defaultSourcePosture": [...],
-//   "items": [
-//      { "name":"latestMac", "rules": [...] },
-//      ...
-//   ]
-// }
+//
+//	{
+//	  "defaultSourcePosture": [...],
+//	  "items": [
+//	     { "name":"latestMac", "rules": [...] },
+//	     ...
+//	  ]
+//	}
 func listAllPostures(c *gin.Context, state *common.State) {
 	postures, defaultPosture, err := getPosturesAndDefault(state)
 	if err != nil {
