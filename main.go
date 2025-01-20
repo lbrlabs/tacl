@@ -20,6 +20,7 @@ import (
 	"github.com/lbrlabs/tacl/pkg/acl/postures"
 	"github.com/lbrlabs/tacl/pkg/acl/settings"
 	"github.com/lbrlabs/tacl/pkg/acl/ssh"
+	"github.com/lbrlabs/tacl/pkg/cap"
 	"github.com/lbrlabs/tacl/pkg/common"
 	"go.uber.org/zap"
 

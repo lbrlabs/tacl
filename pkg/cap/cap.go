@@ -14,6 +14,8 @@ import (
 
 // TACLManagerCapability is our sub-capability shape:
 //   "manager": { "methods": [...], "endpoints": [...] }
+// If "methods" is ["*"], it means all methods are allowed.
+// If "endpoints" is ["*"], it means all endpoints are allowed.
 type TACLManagerCapability struct {
     Methods   []string `json:"methods"`
     Endpoints []string `json:"endpoints"`
@@ -103,8 +105,10 @@ func TailscaleAuthMiddleware(tsServer *tsnet.Server, logger *zap.Logger) gin.Han
 
         for _, subcapMap := range appCaps {
             if managerCap, haveManager := subcapMap["manager"]; haveManager {
-                if stringInSlice(method, managerCap.Methods) &&
-                   stringInSlice(endpointFirstSegment, managerCap.Endpoints) {
+                // If managerCap.Methods includes "*", all methods are allowed.
+                // If managerCap.Endpoints includes "*", all endpoints are allowed.
+                if matchStringListOrWildcard(method, managerCap.Methods) &&
+                   matchStringListOrWildcard(endpointFirstSegment, managerCap.Endpoints) {
                     allowed = true
                     break
                 }
@@ -125,6 +129,19 @@ func TailscaleAuthMiddleware(tsServer *tsnet.Server, logger *zap.Logger) gin.Han
         // Success!
         c.Next()
     }
+}
+
+// matchStringListOrWildcard returns true if `list` has "*"
+// or if `item` is in `list`.
+func matchStringListOrWildcard(item string, list []string) bool {
+    // If the list includes "*", it means "any".
+    for _, s := range list {
+        if s == "*" {
+            return true
+        }
+    }
+    // Otherwise, check membership
+    return stringInSlice(item, list)
 }
 
 // abortWithJSON aborts the current request with a given status code and JSON error message.
