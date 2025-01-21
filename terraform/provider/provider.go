@@ -131,6 +131,7 @@ func (p *taclProvider) DataSources(_ context.Context) []func() datasource.DataSo
         NewDERPMapDataSource,
         NewHostsDataSource,
         NewSettingsDataSource,
+        NewNodeAttrDataSource,
     }
 }
 
@@ -143,5 +144,6 @@ func (p *taclProvider) Resources(_ context.Context) []func() resource.Resource {
         NewDERPMapResource,
         NewHostsResource,
         NewSettingsResource,
+        NewNodeAttrResource,
     }
 }

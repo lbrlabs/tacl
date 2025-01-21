@@ -1,3 +1,5 @@
+// pkg/acl/hosts/hosts.go
+
 package hosts
 
 import (

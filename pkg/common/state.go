@@ -1,3 +1,5 @@
+// pkg/common/state.go
+
 package common
 
 import (
