@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lbrlabs/tacl/pkg/common"
-	tsclient "github.com/tailscale/tailscale-client-go/v2" // for ACLTest if it's defined there
+	tsclient "github.com/tailscale/tailscale-client-go/v2"
 )
 
 // RegisterRoutes wires up the ACLTest-related routes at /acltests.

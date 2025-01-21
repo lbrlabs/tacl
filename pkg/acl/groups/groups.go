@@ -9,12 +9,10 @@ import (
 	"github.com/lbrlabs/tacl/pkg/common"
 )
 
-// Group is the user-facing structure. We keep "Description" for future, we might use for hujson
-// but only "Name" + "Members" will persist to state.
+// Group is the user-facing structure. 
 type Group struct {
 	Name        string   `json:"name" binding:"required"`
 	Members     []string `json:"members"`
-	Description string   `json:"description,omitempty"`
 }
 
 // RegisterRoutes wires up the /groups endpoints.
@@ -189,7 +187,7 @@ func deleteGroup(c *gin.Context, state *common.State) {
 
 // -----------------------------------------------------------------------------
 // Conversion: We want final JSON => "groups": { "group:<Name>": [...members...] }
-// But user sees array of Group {Name, Members, Description}.
+// But user sees array of Group {Name, Members}.
 //
 // getGroupsFromState => read map => convert to []Group
 // saveGroups => convert []Group => map => store

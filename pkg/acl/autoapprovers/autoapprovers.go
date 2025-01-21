@@ -57,8 +57,7 @@ func getAutoApprovers(c *gin.Context, state *common.State) {
 }
 
 // createAutoApprovers => POST /autoapprovers
-// Creates a new ACLAutoApprovers if none exists. If one already exists,
-// you can either overwrite or return an error, depending on your preference.
+// Creates a new ACLAutoApprovers if none exists
 func createAutoApprovers(c *gin.Context, state *common.State) {
 	var newAAP tsclient.ACLAutoApprovers
 	if err := c.ShouldBindJSON(&newAAP); err != nil {
@@ -72,7 +71,7 @@ func createAutoApprovers(c *gin.Context, state *common.State) {
 		return
 	}
 
-	// If you want to error out if there's already one:
+	// We already have autoApprovers => "duplicate instance"
 	if existing != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "autoApprovers already exists"})
 		return
