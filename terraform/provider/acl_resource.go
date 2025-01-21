@@ -8,7 +8,6 @@ import (
     "fmt"
     "io"
     "net/http"
-    "strconv"
 
     "github.com/hashicorp/terraform-plugin-framework/resource"
     "github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -16,47 +15,52 @@ import (
     "github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
-// TaclACLEntry represents the new-style ACL JSON.
+// TaclACLEntry => Represents the ACL portion (action, src, proto, dst). 
+// On the server side, there's also an "id" string field in ExtendedACLEntry.
 type TaclACLEntry struct {
     Action string   `json:"action"`          // e.g. "accept" or "deny"
-    Src    []string `json:"src"`             // e.g. ["10.0.0.0/8"]
-    Proto  string   `json:"proto,omitempty"` // e.g. "tcp" (optional)
-    Dst    []string `json:"dst"`             // e.g. ["10.1.2.3/32:22","tag:prod:*"]
+    Src    []string `json:"src"`             // e.g. ["tag:dev"]
+    Proto  string   `json:"proto,omitempty"` // optional
+    Dst    []string `json:"dst"`             // e.g. ["tag:prod:*","10.1.2.3/32:22"]
 }
 
-// Ensure interface compliance: we need Resource + ResourceWithConfigure.
+// TaclACLResponse => The server's ExtendedACLEntry shape: stable ID + the fields above
+type TaclACLResponse struct {
+    ID   string         `json:"id"` // stable UUID from TACL
+    TaclACLEntry        // embed the rest
+}
+
+// Ensure interface compliance with Terraform plugin framework.
 var (
     _ resource.Resource              = &aclResource{}
     _ resource.ResourceWithConfigure = &aclResource{}
 )
 
-// NewACLResource is the constructor for "tacl_acl" resource (new-style).
+// NewACLResource => constructor for "tacl_acl" resource
 func NewACLResource() resource.Resource {
     return &aclResource{}
 }
 
-// aclResource implements resource.Resource for "tacl_acl".
+// aclResource => main struct implementing Resource
 type aclResource struct {
     httpClient *http.Client
     endpoint   string
 }
 
-// aclResourceModel => Terraform schema mapping.
+// aclResourceModel => Terraform schema for storing the user's config + the ID
 type aclResourceModel struct {
-    // ID is the index in TACL’s /acls array, stored as a string (e.g. "0").
-    ID     types.String   `tfsdk:"id"`
-    Action types.String   `tfsdk:"action"`
+    ID     types.String   `tfsdk:"id"`     // TACL's stable UUID
+    Action types.String   `tfsdk:"action"` // "accept"/"deny"
     Src    []types.String `tfsdk:"src"`
     Proto  types.String   `tfsdk:"proto"`
     Dst    []types.String `tfsdk:"dst"`
 }
 
-// -----------------------------------------------------------------------------
-// 1) Configure
-// -----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// 1) Configure / 2) Metadata / 3) Schema
+//------------------------------------------------------------------------------
 
 func (r *aclResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-    // Retrieve the provider’s data
     if req.ProviderData == nil {
         return
     }
@@ -68,25 +72,16 @@ func (r *aclResource) Configure(ctx context.Context, req resource.ConfigureReque
     r.endpoint = provider.endpoint
 }
 
-// -----------------------------------------------------------------------------
-// 2) Metadata
-// -----------------------------------------------------------------------------
-
 func (r *aclResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-    // Final type name => "tacl_acl"
     resp.TypeName = req.ProviderTypeName + "_acl"
 }
 
-// -----------------------------------------------------------------------------
-// 3) Schema
-// -----------------------------------------------------------------------------
-
 func (r *aclResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
     resp.Schema = schema.Schema{
-        Description: "Manages a single new-style ACL entry in TACL’s /acls array.",
+        Description: "Manages a single ACL entry by stable ID in TACL’s /acls.",
         Attributes: map[string]schema.Attribute{
             "id": schema.StringAttribute{
-                Description: "Index of this ACL entry in TACL’s array (stored as a string).",
+                Description: "TACL's stable UUID for this ACL entry.",
                 Computed:    true,
             },
             "action": schema.StringAttribute{
@@ -99,11 +94,11 @@ func (r *aclResource) Schema(ctx context.Context, req resource.SchemaRequest, re
                 ElementType: types.StringType,
             },
             "proto": schema.StringAttribute{
-                Description: "Protocol, e.g. 'tcp' or 'udp' (optional).",
+                Description: "Optional protocol, e.g. 'tcp'.",
                 Optional:    true,
             },
             "dst": schema.ListAttribute{
-                Description: "List of destination CIDRs, tags, or hostnames (maybe with :port).",
+                Description: "List of destination CIDRs/tags. Possibly with :port.",
                 Required:    true,
                 ElementType: types.StringType,
             },
@@ -111,137 +106,12 @@ func (r *aclResource) Schema(ctx context.Context, req resource.SchemaRequest, re
     }
 }
 
-// -----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // 4) Create
-// -----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 func (r *aclResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-    var data aclResourceModel
-
-    // Get user inputs from the plan
-    diags := req.Plan.Get(ctx, &data)
-    resp.Diagnostics.Append(diags...)
-    if resp.Diagnostics.HasError() {
-        return
-    }
-
-    // Convert to JSON payload
-    newACL := TaclACLEntry{
-        Action: data.Action.ValueString(),
-        Src:    toGoStringSlice(data.Src),
-        Proto:  data.Proto.ValueString(),
-        Dst:    toGoStringSlice(data.Dst),
-    }
-
-    // POST /acls
-    postURL := fmt.Sprintf("%s/acls", r.endpoint)
-    tflog.Debug(ctx, "Creating ACL via TACL (new-style)", map[string]interface{}{
-        "url": postURL,
-        "acl": newACL,
-    })
-
-    body, err := doNewStyleACLRequest(ctx, r.httpClient, http.MethodPost, postURL, newACL)
-    if err != nil {
-        resp.Diagnostics.AddError("Create ACL error", err.Error())
-        return
-    }
-
-    // The server returns the created ACL object (but not its index).
-    var created TaclACLEntry
-    if err := json.Unmarshal(body, &created); err != nil {
-        resp.Diagnostics.AddError("Error parsing create response", err.Error())
-        return
-    }
-
-    // GET /acls => find the index of newly-created ACL
-    getAllURL := fmt.Sprintf("%s/acls", r.endpoint)
-    allBody, err := doNewStyleACLRequest(ctx, r.httpClient, http.MethodGet, getAllURL, nil)
-    if err != nil {
-        resp.Diagnostics.AddError("Failed to list ACLs after create", err.Error())
-        return
-    }
-
-    var allACLs []TaclACLEntry
-    if err := json.Unmarshal(allBody, &allACLs); err != nil {
-        resp.Diagnostics.AddError("Error parsing ACL list response", err.Error())
-        return
-    }
-
-    idx := findNewStyleACLIndex(allACLs, created)
-    if idx < 0 {
-        resp.Diagnostics.AddError("Not found", "Could not find newly created ACL in the list.")
-        return
-    }
-
-    // Store index in data.ID
-    data.ID = types.StringValue(fmt.Sprintf("%d", idx))
-
-    // Save final state
-    diags = resp.State.Set(ctx, &data)
-    resp.Diagnostics.Append(diags...)
-}
-
-// -----------------------------------------------------------------------------
-// 5) Read
-// -----------------------------------------------------------------------------
-
-func (r *aclResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-    var data aclResourceModel
-    // Read the existing state to see what ID we have
-    diags := req.State.Get(ctx, &data)
-    resp.Diagnostics.Append(diags...)
-    if resp.Diagnostics.HasError() {
-        return
-    }
-
-    idxStr := data.ID.ValueString()
-    idx, err := strconv.Atoi(idxStr)
-    if err != nil {
-        resp.Diagnostics.AddWarning("Invalid ID", fmt.Sprintf("Could not parse ACL index '%s'", idxStr))
-        resp.State.RemoveResource(ctx)
-        return
-    }
-
-    // GET /acls/:index
-    getURL := fmt.Sprintf("%s/acls/%d", r.endpoint, idx)
-    tflog.Debug(ctx, "Reading ACL (new-style)", map[string]interface{}{
-        "url":   getURL,
-        "index": idx,
-    })
-
-    body, err := doNewStyleACLRequest(ctx, r.httpClient, http.MethodGet, getURL, nil)
-    if err != nil {
-        if IsNotFound(err) {
-            tflog.Warn(ctx, "ACL not found, removing from state", map[string]interface{}{"index": idx})
-            resp.State.RemoveResource(ctx)
-            return
-        }
-        resp.Diagnostics.AddError("Read ACL error", err.Error())
-        return
-    }
-
-    var fetched TaclACLEntry
-    if err := json.Unmarshal(body, &fetched); err != nil {
-        resp.Diagnostics.AddError("Error parsing read response", err.Error())
-        return
-    }
-
-    // Populate Terraform state
-    data.Action = types.StringValue(fetched.Action)
-    data.Src = toTerraformStringSlice(fetched.Src)
-    data.Proto = types.StringValue(fetched.Proto)
-    data.Dst = toTerraformStringSlice(fetched.Dst)
-
-    diags = resp.State.Set(ctx, &data)
-    resp.Diagnostics.Append(diags...)
-}
-
-// -----------------------------------------------------------------------------
-// 6) Update
-// -----------------------------------------------------------------------------
-
-func (r *aclResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-    // 1) Read new user changes into `plan`
+    // 1. Read plan data
     var plan aclResourceModel
     diags := req.Plan.Get(ctx, &plan)
     resp.Diagnostics.Append(diags...)
@@ -249,48 +119,153 @@ func (r *aclResource) Update(ctx context.Context, req resource.UpdateRequest, re
         return
     }
 
-    // 2) Read old resource state into `state`
+    // 2. Convert to JSON for TACL => TaclACLEntry
+    payload := TaclACLEntry{
+        Action: plan.Action.ValueString(),
+        Src:    toStringSlice(plan.Src),
+        Proto:  plan.Proto.ValueString(),
+        Dst:    toStringSlice(plan.Dst),
+    }
+
+    // 3. POST /acls => create a new item with a server-generated ID
+    postURL := fmt.Sprintf("%s/acls", r.endpoint)
+    tflog.Debug(ctx, "Creating ACL by ID", map[string]interface{}{
+        "url":     postURL,
+        "payload": payload,
+    })
+
+    body, err := doACLIDRequest(ctx, r.httpClient, http.MethodPost, postURL, payload)
+    if err != nil {
+        resp.Diagnostics.AddError("Create ACL error", err.Error())
+        return
+    }
+
+    // 4. Parse response => TaclACLResponse
+    var created TaclACLResponse
+    if e := json.Unmarshal(body, &created); e != nil {
+        resp.Diagnostics.AddError("Parse create response error", e.Error())
+        return
+    }
+
+    // 5. Save ID + other fields to state
+    plan.ID = types.StringValue(created.ID)
+    plan.Action = types.StringValue(created.Action)
+    plan.Src = toTerraformStringSlice(created.Src)
+    plan.Proto = types.StringValue(created.Proto)
+    plan.Dst = toTerraformStringSlice(created.Dst)
+
+    diags = resp.State.Set(ctx, &plan)
+    resp.Diagnostics.Append(diags...)
+}
+
+//------------------------------------------------------------------------------
+// 5) Read
+//------------------------------------------------------------------------------
+
+func (r *aclResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+    // 1. Pull current state (need the ID)
     var state aclResourceModel
-    diags = req.State.Get(ctx, &state)
+    diags := req.State.Get(ctx, &state)
     resp.Diagnostics.Append(diags...)
     if resp.Diagnostics.HasError() {
         return
     }
 
-    // 3) Merge: copy the old state's ID into the plan (since ID is computed)
-    plan.ID = state.ID
+    // 2. If ID is empty => remove
+    if state.ID.IsNull() || state.ID.ValueString() == "" {
+        resp.State.RemoveResource(ctx)
+        return
+    }
+    id := state.ID.ValueString()
 
-    // 4) Convert ID to int
-    idx, err := strconv.Atoi(plan.ID.ValueString())
+    // 3. GET /acls/:id
+    getURL := fmt.Sprintf("%s/acls/%s", r.endpoint, id)
+    tflog.Debug(ctx, "Reading ACL by ID", map[string]interface{}{
+        "url": getURL,
+        "id":  id,
+    })
+
+    body, err := doACLIDRequest(ctx, r.httpClient, http.MethodGet, getURL, nil)
     if err != nil {
-        resp.Diagnostics.AddWarning("Invalid ID", fmt.Sprintf("Could not parse ACL index '%s'", plan.ID.ValueString()))
+        if isNotFound(err) {
+            // TACL says it's gone => remove from TF
+            resp.State.RemoveResource(ctx)
+            return
+        }
+        resp.Diagnostics.AddError("Read ACL error", err.Error())
+        return
+    }
+
+    var fetched TaclACLResponse
+    if e := json.Unmarshal(body, &fetched); e != nil {
+        resp.Diagnostics.AddError("Parse read response error", e.Error())
+        return
+    }
+
+    // 4. Update state with fetched data
+    state.ID = types.StringValue(fetched.ID)
+    state.Action = types.StringValue(fetched.Action)
+    state.Src = toTerraformStringSlice(fetched.Src)
+    state.Proto = types.StringValue(fetched.Proto)
+    state.Dst = toTerraformStringSlice(fetched.Dst)
+
+    diags = resp.State.Set(ctx, &state)
+    resp.Diagnostics.Append(diags...)
+}
+
+//------------------------------------------------------------------------------
+// 6) Update
+//------------------------------------------------------------------------------
+
+func (r *aclResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+    // 1. Old state => preserve ID
+    var oldState aclResourceModel
+    diags := req.State.Get(ctx, &oldState)
+    resp.Diagnostics.Append(diags...)
+    if resp.Diagnostics.HasError() {
+        return
+    }
+
+    // 2. New plan => new user config
+    var plan aclResourceModel
+    diags = req.Plan.Get(ctx, &plan)
+    resp.Diagnostics.Append(diags...)
+    if resp.Diagnostics.HasError() {
+        return
+    }
+
+    // 3. Merge ID
+    plan.ID = oldState.ID
+    id := plan.ID.ValueString()
+    if id == "" {
+        // no ID => cannot update
         resp.State.RemoveResource(ctx)
         return
     }
 
-    // 5) Build the updated ACL
-    updatedACL := TaclACLEntry{
+    // 4. Convert plan to TaclACLEntry
+    input := TaclACLEntry{
         Action: plan.Action.ValueString(),
-        Src:    toGoStringSlice(plan.Src),
+        Src:    toStringSlice(plan.Src),
         Proto:  plan.Proto.ValueString(),
-        Dst:    toGoStringSlice(plan.Dst),
+        Dst:    toStringSlice(plan.Dst),
     }
 
-    // 6) PUT => /acls with { "index": idx, "entry": updatedACL }
+    // 5. PUT /acls => { "id":"<uuid>", "entry": { ... } }
     payload := map[string]interface{}{
-        "index": idx,
-        "entry": updatedACL,
+        "id":    id,
+        "entry": input,
     }
     putURL := fmt.Sprintf("%s/acls", r.endpoint)
-    tflog.Debug(ctx, "Updating ACL (new-style)", map[string]interface{}{
+    tflog.Debug(ctx, "Updating ACL by ID", map[string]interface{}{
         "url":     putURL,
         "payload": payload,
     })
 
-    body, err := doNewStyleACLRequest(ctx, r.httpClient, http.MethodPut, putURL, payload)
+    body, err := doACLIDRequest(ctx, r.httpClient, http.MethodPut, putURL, payload)
     if err != nil {
-        if IsNotFound(err) {
-            // The entry was missing, so remove from state
+        if isNotFound(err) {
+            // TACL says it's gone => remove from state
             resp.State.RemoveResource(ctx)
             return
         }
@@ -298,26 +273,27 @@ func (r *aclResource) Update(ctx context.Context, req resource.UpdateRequest, re
         return
     }
 
-    var returned TaclACLEntry
-    if err := json.Unmarshal(body, &returned); err != nil {
-        resp.Diagnostics.AddError("Error parsing update response", err.Error())
+    var updated TaclACLResponse
+    if e := json.Unmarshal(body, &updated); e != nil {
+        resp.Diagnostics.AddError("Parse update response error", e.Error())
         return
     }
 
-    // 7) Refresh plan’s fields
-    plan.Action = types.StringValue(returned.Action)
-    plan.Src = toTerraformStringSlice(returned.Src)
-    plan.Proto = types.StringValue(returned.Proto)
-    plan.Dst = toTerraformStringSlice(returned.Dst)
+    // 6. Merge updated data back
+    plan.ID = types.StringValue(updated.ID)
+    plan.Action = types.StringValue(updated.Action)
+    plan.Src = toTerraformStringSlice(updated.Src)
+    plan.Proto = types.StringValue(updated.Proto)
+    plan.Dst = toTerraformStringSlice(updated.Dst)
 
-    // 8) Write final merged state
+    // 7. Save final
     diags = resp.State.Set(ctx, &plan)
     resp.Diagnostics.Append(diags...)
 }
 
-// -----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 // 7) Delete
-// -----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
 
 func (r *aclResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
     var data aclResourceModel
@@ -327,24 +303,26 @@ func (r *aclResource) Delete(ctx context.Context, req resource.DeleteRequest, re
         return
     }
 
-    idx, err := strconv.Atoi(data.ID.ValueString())
-    if err != nil {
-        // If not parseable, remove from state
+    id := data.ID.ValueString()
+    if id == "" {
+        // already removed
         resp.State.RemoveResource(ctx)
         return
     }
 
+    // DELETE => /acls => { "id":"<uuid>" }
     delURL := fmt.Sprintf("%s/acls", r.endpoint)
-    tflog.Debug(ctx, "Deleting ACL (new-style)", map[string]interface{}{
-        "url":   delURL,
-        "index": idx,
+    payload := map[string]string{"id": id}
+
+    tflog.Debug(ctx, "Deleting ACL by ID", map[string]interface{}{
+        "url":     delURL,
+        "payload": payload,
     })
 
-    payload := map[string]int{"index": idx}
-    _, err = doNewStyleACLRequest(ctx, r.httpClient, http.MethodDelete, delURL, payload)
+    _, err := doACLIDRequest(ctx, r.httpClient, http.MethodDelete, delURL, payload)
     if err != nil {
-        if IsNotFound(err) {
-            // Already gone
+        if isNotFound(err) {
+            // already gone
         } else {
             resp.Diagnostics.AddError("Delete ACL error", err.Error())
             return
@@ -354,64 +332,40 @@ func (r *aclResource) Delete(ctx context.Context, req resource.DeleteRequest, re
     resp.State.RemoveResource(ctx)
 }
 
-// -----------------------------------------------------------------------------
-// findNewStyleACLIndex => naive match of action, src, proto, dst
-// -----------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// Helper HTTP logic
+//------------------------------------------------------------------------------
 
-func findNewStyleACLIndex(all []TaclACLEntry, entry TaclACLEntry) int {
-    for i, a := range all {
-        if a.Action != entry.Action {
-            continue
-        }
-        if !equalStringSlice(a.Src, entry.Src) {
-            continue
-        }
-        if a.Proto != entry.Proto {
-            continue
-        }
-        if !equalStringSlice(a.Dst, entry.Dst) {
-            continue
-        }
-        return i
-    }
-    return -1
-}
-
-// doNewStyleACLRequest => general JSON request, returning body or error
-func doNewStyleACLRequest(ctx context.Context, client *http.Client, method, url string, payload interface{}) ([]byte, error) {
+func doACLIDRequest(ctx context.Context, client *http.Client, method, url string, payload interface{}) ([]byte, error) {
     var body io.Reader
     if payload != nil {
-        data, err := json.Marshal(payload)
+        b, err := json.Marshal(payload)
         if err != nil {
             return nil, fmt.Errorf("failed to marshal payload: %w", err)
         }
-        body = bytes.NewBuffer(data)
+        body = bytes.NewBuffer(b)
     }
 
     req, err := http.NewRequestWithContext(ctx, method, url, body)
     if err != nil {
-        return nil, fmt.Errorf("failed to create request: %w", err)
+        return nil, fmt.Errorf("request creation error: %w", err)
     }
     req.Header.Set("Content-Type", "application/json")
 
-    res, err := client.Do(req)
+    resp, err := client.Do(req)
     if err != nil {
-        return nil, fmt.Errorf("request error: %w", err)
+        return nil, fmt.Errorf("ACL ID request error: %w", err)
     }
-    defer res.Body.Close()
+    defer resp.Body.Close()
 
-    if res.StatusCode == 404 {
-        // not found
+    if resp.StatusCode == 404 {
         return nil, &NotFoundError{Message: "ACL not found"}
     }
-    if res.StatusCode >= 300 {
-        msg, _ := io.ReadAll(res.Body)
-        return nil, fmt.Errorf("TACL returned %d: %s", res.StatusCode, string(msg))
+    if resp.StatusCode >= 300 {
+        msg, _ := io.ReadAll(resp.Body)
+        return nil, fmt.Errorf("TACL returned %d: %s", resp.StatusCode, string(msg))
     }
 
-    respBody, err := io.ReadAll(res.Body)
-    if err != nil {
-        return nil, fmt.Errorf("failed to read response: %w", err)
-    }
-    return respBody, nil
+    return io.ReadAll(resp.Body)
 }
+

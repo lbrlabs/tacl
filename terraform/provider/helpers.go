@@ -169,3 +169,8 @@ func toTerraformStringSlice(ss []string) []types.String {
 	}
 	return out
 }
+
+func isNotFound(err error) bool {
+    _, ok := err.(*NotFoundError)
+    return ok
+}
