@@ -1,3 +1,5 @@
+// nodeattr_resource.go
+
 package provider
 
 import (
@@ -7,7 +9,6 @@ import (
     "fmt"
     "io"
     "net/http"
-    "strconv"
 
     "github.com/hashicorp/terraform-plugin-framework/resource"
     "github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -15,51 +16,59 @@ import (
     "github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
-// Ensure interface compliance
+// nodeattrResource => manages one NodeAttr by stable ID
 var (
     _ resource.Resource              = &nodeattrResource{}
     _ resource.ResourceWithConfigure = &nodeattrResource{}
 )
 
-// NewNodeAttrResource => single "nodeattr" entry in TACL's nodeAttrs array
 func NewNodeAttrResource() resource.Resource {
     return &nodeattrResource{}
 }
 
+// nodeattrResource => main struct
 type nodeattrResource struct {
     httpClient *http.Client
     endpoint   string
 }
 
-// nodeattrResourceModel => user sets `target` plus EXACTLY one of `attr` or `app_json`.
+// nodeattrResourceModel => Terraform schema. Now "id" is the TACL UUID, not an index.
 type nodeattrResourceModel struct {
-    ID      types.String   `tfsdk:"id"`       // array index in string form
-    Target  []types.String `tfsdk:"target"`   // required
-    Attr    []types.String `tfsdk:"attr"`     // optional
-    AppJSON types.String   `tfsdk:"app_json"` // optional
+    ID     types.String   `tfsdk:"id"`     // TACL's stable ID
+    Target []types.String `tfsdk:"target"` // required
+    Attr   []types.String `tfsdk:"attr"`   // optional
+    AppJSON types.String  `tfsdk:"app_json"`
 }
 
-// We'll pass NodeAttrInput to TACL in create/update.
-type NodeAttrInput struct {
+// NodeAttrGrantInput => request body for create/update ("grant")
+type NodeAttrGrantInput struct {
     Target []string               `json:"target"`
     Attr   []string               `json:"attr,omitempty"`
     App    map[string]interface{} `json:"app,omitempty"`
 }
 
-// ----------------------------------------------------------------------------
+// NodeAttrResponse => TACL's returned object: stable ID + fields
+type NodeAttrResponse struct {
+    ID     string                 `json:"id"`
+    Target []string               `json:"target"`
+    Attr   []string               `json:"attr,omitempty"`
+    App    map[string]interface{} `json:"app,omitempty"`
+}
+
+// -----------------------------------------------------------------------------
 // Configure / Metadata / Schema
-// ----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 
 func (r *nodeattrResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
     if req.ProviderData == nil {
         return
     }
-    p, ok := req.ProviderData.(*taclProvider)
+    provider, ok := req.ProviderData.(*taclProvider)
     if !ok {
         return
     }
-    r.httpClient = p.httpClient
-    r.endpoint = p.endpoint
+    r.httpClient = provider.httpClient
+    r.endpoint = provider.endpoint
 }
 
 func (r *nodeattrResource) Metadata(ctx context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -68,14 +77,14 @@ func (r *nodeattrResource) Metadata(ctx context.Context, req resource.MetadataRe
 
 func (r *nodeattrResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
     resp.Schema = schema.Schema{
-        Description: "Manages one entry in TACL’s nodeAttrs array by index. Exactly one of `attr` or `app_json` must be set.",
+        Description: "Manages one nodeattr entry by stable ID in TACL’s /nodeattrs.",
         Attributes: map[string]schema.Attribute{
             "id": schema.StringAttribute{
-                Description: "Index in TACL’s nodeAttrs array (string form).",
+                Description: "TACL's stable ID for this nodeattr.",
                 Computed:    true,
             },
             "target": schema.ListAttribute{
-                Description: "Required list of target strings.",
+                Description: "Required list of target strings (or forced to [\"*\"] if `app_json` is used).",
                 Required:    true,
                 ElementType: types.StringType,
             },
@@ -92,231 +101,235 @@ func (r *nodeattrResource) Schema(ctx context.Context, req resource.SchemaReques
     }
 }
 
-// ----------------------------------------------------------------------------
-// Create => POST => find new index
-// ----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 1) Create => POST /nodeattrs => returns {"id":"<uuid>", "target":[],"attr":[],"app":{}}
+// -----------------------------------------------------------------------------
 
 func (r *nodeattrResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-    var data nodeattrResourceModel
-    diags := req.Plan.Get(ctx, &data)
+    var plan nodeattrResourceModel
+    diags := req.Plan.Get(ctx, &plan)
     resp.Diagnostics.Append(diags...)
     if resp.Diagnostics.HasError() {
         return
     }
 
-    // Check mutual exclusivity
-    hasAttr := len(data.Attr) > 0
-    hasApp := (!data.AppJSON.IsNull() && !data.AppJSON.IsUnknown() && data.AppJSON.ValueString() != "")
+    hasAttr := len(plan.Attr) > 0
+    hasApp := plan.AppJSON.ValueString() != "" && !plan.AppJSON.IsNull() && !plan.AppJSON.IsUnknown()
+
+    // exactly one
     if (hasAttr && hasApp) || (!hasAttr && !hasApp) {
-        resp.Diagnostics.AddError("Invalid config", "Exactly one of `attr` or `app_json` must be set.")
+        resp.Diagnostics.AddError("Invalid config",
+            "Exactly one of `attr` or `app_json` must be set.")
         return
     }
 
-    // Build NodeAttrInput
-    input := NodeAttrInput{
-        Target: toGoStringSlice(data.Target),
+    // Build input
+    input := NodeAttrGrantInput{
+        Target: toStringSlice(plan.Target),
     }
     if hasAttr {
-        input.Attr = toGoStringSlice(data.Attr)
+        input.Attr = toStringSlice(plan.Attr)
     } else {
+        // parse app JSON
         var app map[string]interface{}
-        if e := json.Unmarshal([]byte(data.AppJSON.ValueString()), &app); e != nil {
-            resp.Diagnostics.AddError("Invalid app_json", e.Error())
+        if err := json.Unmarshal([]byte(plan.AppJSON.ValueString()), &app); err != nil {
+            resp.Diagnostics.AddError("Invalid app_json", err.Error())
             return
         }
         input.App = app
     }
 
-    postURL := fmt.Sprintf("%s/nodeattrs", r.endpoint)
-    tflog.Debug(ctx, "Creating nodeattr", map[string]interface{}{
-        "url": postURL, "payload": input,
+    // POST /nodeattrs
+    url := fmt.Sprintf("%s/nodeattrs", r.endpoint)
+    tflog.Debug(ctx, "Creating nodeattr by ID", map[string]interface{}{
+        "url": url, "payload": input,
     })
 
-    body, err := doNodeAttrReq(ctx, r.httpClient, http.MethodPost, postURL, input)
+    body, err := doNodeAttrIDRequest(ctx, r.httpClient, http.MethodPost, url, input)
     if err != nil {
         resp.Diagnostics.AddError("Create nodeattr error", err.Error())
         return
     }
 
-    // parse TACL's response => newly created object
-    var created map[string]interface{}
-    if err := json.Unmarshal(body, &created); err != nil {
-        resp.Diagnostics.AddError("Parse create response error", err.Error())
+    var created NodeAttrResponse
+    if e := json.Unmarshal(body, &created); e != nil {
+        resp.Diagnostics.AddError("Parse create response error", e.Error())
         return
     }
 
-    // GET /nodeattrs => find index
-    listURL := fmt.Sprintf("%s/nodeattrs", r.endpoint)
-    allBody, err := doNodeAttrReq(ctx, r.httpClient, http.MethodGet, listURL, nil)
-    if err != nil {
-        resp.Diagnostics.AddError("List nodeattrs error", err.Error())
-        return
-    }
-    var all []map[string]interface{}
-    if err := json.Unmarshal(allBody, &all); err != nil {
-        resp.Diagnostics.AddError("Parse nodeattrs array error", err.Error())
-        return
+    // Fill plan from server response
+    plan.ID = types.StringValue(created.ID)
+    plan.Target = toTerraformStringSlice(created.Target)
+    if len(created.Attr) > 0 {
+        plan.Attr = toTerraformStringSlice(created.Attr)
+        plan.AppJSON = types.StringValue("")
+    } else if created.App != nil {
+        b, _ := json.Marshal(created.App)
+        plan.AppJSON = types.StringValue(string(b))
+        plan.Attr = []types.String{}
     }
 
-    idx := findNodeAttrIndex(all, created)
-    if idx < 0 {
-        resp.Diagnostics.AddError("Not found", "Could not find newly created nodeattr in array.")
-        return
-    }
-    data.ID = types.StringValue(strconv.Itoa(idx))
-
-    diags = resp.State.Set(ctx, &data)
+    diags = resp.State.Set(ctx, &plan)
     resp.Diagnostics.Append(diags...)
 }
 
-// ----------------------------------------------------------------------------
-// Read => GET /nodeattrs/:index
-// ----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 2) Read => GET /nodeattrs/:id
+// -----------------------------------------------------------------------------
 
 func (r *nodeattrResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-    var data nodeattrResourceModel
-    diags := req.State.Get(ctx, &data)
+    var state nodeattrResourceModel
+    diags := req.State.Get(ctx, &state)
     resp.Diagnostics.Append(diags...)
     if resp.Diagnostics.HasError() {
         return
     }
 
-    idxStr := data.ID.ValueString()
-    idx, err := strconv.Atoi(idxStr)
-    if err != nil {
-        // invalid => remove
-        resp.Diagnostics.AddWarning("Invalid ID", "Could not parse nodeattr index from state.")
+    if state.ID.IsNull() || state.ID.ValueString() == "" {
+        // no ID => remove
         resp.State.RemoveResource(ctx)
         return
     }
+    id := state.ID.ValueString()
 
-    getURL := fmt.Sprintf("%s/nodeattrs/%d", r.endpoint, idx)
-    tflog.Debug(ctx, "Reading nodeattr", map[string]interface{}{
-        "url":   getURL,
-        "index": idx,
+    url := fmt.Sprintf("%s/nodeattrs/%s", r.endpoint, id)
+    tflog.Debug(ctx, "Reading nodeattr by ID", map[string]interface{}{
+        "url": url, "id": id,
     })
 
-    body, e := doNodeAttrReq(ctx, r.httpClient, http.MethodGet, getURL, nil)
-    if e != nil {
-        if IsNotFound(e) {
-            // TACL says index is gone => remove from state
+    body, err := doNodeAttrIDRequest(ctx, r.httpClient, http.MethodGet, url, nil)
+    if err != nil {
+        if isNotFound(err) {
             resp.State.RemoveResource(ctx)
             return
         }
-        resp.Diagnostics.AddError("Read nodeattr error", e.Error())
+        resp.Diagnostics.AddError("Read nodeattr error", err.Error())
         return
     }
 
-    var fetched map[string]interface{}
-    if err := json.Unmarshal(body, &fetched); err != nil {
-        resp.Diagnostics.AddError("Parse read response error", err.Error())
+    var fetched NodeAttrResponse
+    if e := json.Unmarshal(body, &fetched); e != nil {
+        resp.Diagnostics.AddError("Parse read response error", e.Error())
         return
     }
 
-    fillResourceModel(&data, fetched)
-    diags = resp.State.Set(ctx, &data)
+    state.ID = types.StringValue(fetched.ID)
+    state.Target = toTerraformStringSlice(fetched.Target)
+    if len(fetched.Attr) > 0 {
+        state.Attr = toTerraformStringSlice(fetched.Attr)
+        state.AppJSON = types.StringValue("")
+    } else if fetched.App != nil {
+        b, _ := json.Marshal(fetched.App)
+        state.AppJSON = types.StringValue(string(b))
+        state.Attr = []types.String{}
+    } else {
+        state.Attr = []types.String{}
+        state.AppJSON = types.StringValue("")
+    }
+
+    diags = resp.State.Set(ctx, &state)
     resp.Diagnostics.Append(diags...)
 }
 
-// ----------------------------------------------------------------------------
-// Update => PUT => { index, grant }
-// ----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 3) Update => PUT /nodeattrs => { "id":"<uuid>","grant":{...} }
+// -----------------------------------------------------------------------------
 
 func (r *nodeattrResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-    // Step 1. Read the old state into oldData, to preserve the old ID
-    var oldData nodeattrResourceModel
-    diags := req.State.Get(ctx, &oldData)
+    // old => preserve ID
+    var oldState nodeattrResourceModel
+    diags := req.State.Get(ctx, &oldState)
     resp.Diagnostics.Append(diags...)
     if resp.Diagnostics.HasError() {
         return
     }
 
-    // Step 2. Read the new plan data (the user’s changes) into planData
-    var planData nodeattrResourceModel
-    diags = req.Plan.Get(ctx, &planData)
+    // plan => new config
+    var plan nodeattrResourceModel
+    diags = req.Plan.Get(ctx, &plan)
     resp.Diagnostics.Append(diags...)
     if resp.Diagnostics.HasError() {
         return
     }
 
-    // Check exclusivity again
-    hasAttr := len(planData.Attr) > 0
-    hasApp := (!planData.AppJSON.IsNull() && !planData.AppJSON.IsUnknown() && planData.AppJSON.ValueString() != "")
-    if (hasAttr && hasApp) || (!hasAttr && !hasApp) {
-        resp.Diagnostics.AddError(
-            "Invalid config",
-            "Must set exactly one of `attr` or `app_json` (not both, not neither).",
-        )
-        return
-    }
-
-    // Step 3. Parse the old ID
-    idxStr := oldData.ID.ValueString()
-    idx, err := strconv.Atoi(idxStr)
-    if err != nil {
-        // The old state had an invalid ID => remove resource from state
-        resp.Diagnostics.AddWarning("Invalid ID", fmt.Sprintf("Could not parse nodeattr index '%s' from old state", idxStr))
+    plan.ID = oldState.ID
+    id := plan.ID.ValueString()
+    if id == "" {
+        // no ID => remove
         resp.State.RemoveResource(ctx)
         return
     }
 
-    // Step 4. Build NodeAttrInput from the plan changes
-    input := NodeAttrInput{
-        Target: toGoStringSlice(planData.Target),
+    hasAttr := len(plan.Attr) > 0
+    hasApp := plan.AppJSON.ValueString() != "" && !plan.AppJSON.IsNull()
+    if (hasAttr && hasApp) || (!hasAttr && !hasApp) {
+        resp.Diagnostics.AddError("Invalid config",
+            "Exactly one of `attr` or `app_json` must be set.")
+        return
+    }
+
+    // build input
+    input := NodeAttrGrantInput{
+        Target: toStringSlice(plan.Target),
     }
     if hasAttr {
-        input.Attr = toGoStringSlice(planData.Attr)
+        input.Attr = toStringSlice(plan.Attr)
     } else {
         var app map[string]interface{}
-        if e := json.Unmarshal([]byte(planData.AppJSON.ValueString()), &app); e != nil {
-            resp.Diagnostics.AddError("Invalid app_json", e.Error())
+        if err := json.Unmarshal([]byte(plan.AppJSON.ValueString()), &app); err != nil {
+            resp.Diagnostics.AddError("Invalid app_json", err.Error())
             return
         }
         input.App = app
     }
 
     payload := map[string]interface{}{
-        "index": idx,
+        "id":    id,
         "grant": input,
     }
 
-    // Step 5. Call TACL => PUT /nodeattrs
-    putURL := fmt.Sprintf("%s/nodeattrs", r.endpoint)
-    tflog.Debug(ctx, "Updating nodeattr", map[string]interface{}{
-        "url":     putURL,
-        "payload": payload,
+    url := fmt.Sprintf("%s/nodeattrs", r.endpoint)
+    tflog.Debug(ctx, "Updating nodeattr by ID", map[string]interface{}{
+        "url": url, "payload": payload,
     })
 
-    body, e := doNodeAttrReq(ctx, r.httpClient, http.MethodPut, putURL, payload)
-    if e != nil {
-        if IsNotFound(e) {
-            // TACL says it's gone => remove from state
+    body, err := doNodeAttrIDRequest(ctx, r.httpClient, http.MethodPut, url, payload)
+    if err != nil {
+        if isNotFound(err) {
             resp.State.RemoveResource(ctx)
             return
         }
-        resp.Diagnostics.AddError("Update nodeattr error", e.Error())
+        resp.Diagnostics.AddError("Update nodeattr error", err.Error())
         return
     }
 
-    var updated map[string]interface{}
-    if err := json.Unmarshal(body, &updated); err != nil {
-        resp.Diagnostics.AddError("Parse update response error", err.Error())
+    var updated NodeAttrResponse
+    if e := json.Unmarshal(body, &updated); e != nil {
+        resp.Diagnostics.AddError("Parse update response error", e.Error())
         return
     }
 
-    // Step 6. Merge TACL’s updated data back into planData for final state
-    fillResourceModel(&planData, updated)
-    // Keep the old ID (index)
-    planData.ID = oldData.ID
+    plan.ID = types.StringValue(updated.ID)
+    plan.Target = toTerraformStringSlice(updated.Target)
+    if len(updated.Attr) > 0 {
+        plan.Attr = toTerraformStringSlice(updated.Attr)
+        plan.AppJSON = types.StringValue("")
+    } else if updated.App != nil {
+        b, _ := json.Marshal(updated.App)
+        plan.AppJSON = types.StringValue(string(b))
+        plan.Attr = []types.String{}
+    } else {
+        plan.Attr = []types.String{}
+        plan.AppJSON = types.StringValue("")
+    }
 
-    // Step 7. Save final state
-    diags = resp.State.Set(ctx, &planData)
+    diags = resp.State.Set(ctx, &plan)
     resp.Diagnostics.Append(diags...)
 }
 
-// ----------------------------------------------------------------------------
-// Delete => { index }
-// ----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// 4) Delete => DELETE => { "id":"<uuid>" }
+// -----------------------------------------------------------------------------
 
 func (r *nodeattrResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
     var data nodeattrResourceModel
@@ -326,51 +339,55 @@ func (r *nodeattrResource) Delete(ctx context.Context, req resource.DeleteReques
         return
     }
 
-    idxStr := data.ID.ValueString()
-    idx, err := strconv.Atoi(idxStr)
-    if err != nil {
-        // Invalid => remove
+    id := data.ID.ValueString()
+    if id == "" {
+        // already removed
         resp.State.RemoveResource(ctx)
         return
     }
 
-    payload := map[string]int{"index": idx}
-    delURL := fmt.Sprintf("%s/nodeattrs", r.endpoint)
-    _, e := doNodeAttrReq(ctx, r.httpClient, http.MethodDelete, delURL, payload)
-    if e != nil {
-        if IsNotFound(e) {
-            // Already gone
+    payload := map[string]string{"id": id}
+    url := fmt.Sprintf("%s/nodeattrs", r.endpoint)
+    tflog.Debug(ctx, "Deleting nodeattr by ID", map[string]interface{}{
+        "url": url, "payload": payload,
+    })
+
+    _, err := doNodeAttrIDRequest(ctx, r.httpClient, http.MethodDelete, url, payload)
+    if err != nil {
+        if isNotFound(err) {
+            // already gone
         } else {
-            resp.Diagnostics.AddError("Delete nodeattr error", e.Error())
+            resp.Diagnostics.AddError("Delete nodeattr error", err.Error())
             return
         }
     }
     resp.State.RemoveResource(ctx)
 }
 
-// ----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // Helpers
-// ----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 
-func doNodeAttrReq(ctx context.Context, client *http.Client, method, url string, payload interface{}) ([]byte, error) {
+// doNodeAttrIDRequest => JSON-based request returning body or error
+func doNodeAttrIDRequest(ctx context.Context, client *http.Client, method, url string, payload interface{}) ([]byte, error) {
     var body io.Reader
     if payload != nil {
         b, err := json.Marshal(payload)
         if err != nil {
-            return nil, err
+            return nil, fmt.Errorf("failed to marshal payload: %w", err)
         }
         body = bytes.NewBuffer(b)
     }
 
     req, err := http.NewRequestWithContext(ctx, method, url, body)
     if err != nil {
-        return nil, fmt.Errorf("nodeattr request creation error: %w", err)
+        return nil, fmt.Errorf("request creation error: %w", err)
     }
     req.Header.Set("Content-Type", "application/json")
 
     resp, err := client.Do(req)
     if err != nil {
-        return nil, fmt.Errorf("nodeattr request error: %w", err)
+        return nil, fmt.Errorf("nodeattr ID request error: %w", err)
     }
     defer resp.Body.Close()
 
@@ -381,51 +398,5 @@ func doNodeAttrReq(ctx context.Context, client *http.Client, method, url string,
         msg, _ := io.ReadAll(resp.Body)
         return nil, fmt.Errorf("TACL returned %d: %s", resp.StatusCode, string(msg))
     }
-
     return io.ReadAll(resp.Body)
-}
-
-// findNodeAttrIndex compares the newly created object to each item in the array to find matching JSON
-func findNodeAttrIndex(all []map[string]interface{}, created map[string]interface{}) int {
-    cBytes, _ := json.Marshal(created)
-    for i, item := range all {
-        iBytes, _ := json.Marshal(item)
-        if string(iBytes) == string(cBytes) {
-            return i
-        }
-    }
-    return -1
-}
-
-// fillResourceModel => parse TACL's JSON => fill resource fields, using empty slices/strings
-func fillResourceModel(data *nodeattrResourceModel, js map[string]interface{}) {
-    // target
-    if t, ok := js["target"].([]interface{}); ok {
-        data.Target = toStringTypeSlice(t)
-    } else {
-        data.Target = []types.String{}
-    }
-
-    // attr
-    if rawAttr, hasAttr := js["attr"]; hasAttr {
-        // If "attr" is present but is an empty array, TACL might send []
-        if arr, isArr := rawAttr.([]interface{}); isArr && len(arr) > 0 {
-            data.Attr = toStringTypeSlice(arr)
-        } else {
-            // treat empty array as empty list
-            data.Attr = []types.String{}
-        }
-    } else {
-        // No "attr" key => store an empty slice
-        data.Attr = []types.String{}
-    }
-
-    // app
-    if rawApp, hasApp := js["app"]; hasApp {
-        appBytes, _ := json.Marshal(rawApp)
-        data.AppJSON = types.StringValue(string(appBytes))
-    } else {
-        // If server omits "app", we store an empty string
-        data.AppJSON = types.StringValue("")
-    }
 }
