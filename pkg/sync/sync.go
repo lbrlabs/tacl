@@ -1,3 +1,5 @@
+// pkg/sync/sync.go
+
 package sync
 
 import (
