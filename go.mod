@@ -8,7 +8,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.83
 	github.com/tailscale/tailscale-client-go/v2 v2.0.0-20241217012816-8143c7dc1766
 	go.uber.org/zap v1.27.0
-	golang.org/x/oauth2 v0.21.0
+	golang.org/x/oauth2 v0.25.0
 	tailscale.com v1.78.3
 )
 
@@ -116,7 +116,7 @@ require (
 	golang.org/x/tools v0.23.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
-	google.golang.org/protobuf v1.34.2 // indirect
+	google.golang.org/protobuf v1.36.3 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gvisor.dev/gvisor v0.0.0-20240722211153-64c016c92987 // indirect
 )

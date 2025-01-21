@@ -42,7 +42,7 @@ func RegisterRoutes(r *gin.Engine, state *common.State) {
 func getAutoApprovers(c *gin.Context, state *common.State) {
 	aap, err := getAutoApproversFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse autoapprovers"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse autoApprovers"})
 		return
 	}
 	if aap == nil {
@@ -68,19 +68,19 @@ func createAutoApprovers(c *gin.Context, state *common.State) {
 
 	existing, err := getAutoApproversFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check existing autoapprovers"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check existing autoApprovers"})
 		return
 	}
 
 	// If you want to error out if there's already one:
 	if existing != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "autoapprovers already exists"})
+		c.JSON(http.StatusConflict, gin.H{"error": "autoApprovers already exists"})
 		return
 	}
 
 	// Overwrite or create:
-	if err := state.UpdateKeyAndSave("autoapprovers", newAAP); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save autoapprovers"})
+	if err := state.UpdateKeyAndSave("autoApprovers", newAAP); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save autoApprovers"})
 		return
 	}
 	c.JSON(http.StatusCreated, newAAP)
@@ -97,19 +97,19 @@ func updateAutoApprovers(c *gin.Context, state *common.State) {
 
 	existing, err := getAutoApproversFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse autoapprovers"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse autoApprovers"})
 		return
 	}
 	if existing == nil {
 		// If you prefer to create if not existing, do that:
 		// or error out:
-		c.JSON(http.StatusNotFound, gin.H{"error": "No autoapprovers found to update"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "No autoApprovers found to update"})
 		return
 	}
 
 	// Overwrite the stored object
-	if err := state.UpdateKeyAndSave("autoapprovers", updated); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update autoapprovers"})
+	if err := state.UpdateKeyAndSave("autoApprovers", updated); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update autoApprovers"})
 		return
 	}
 	c.JSON(http.StatusOK, updated)
@@ -120,25 +120,25 @@ func updateAutoApprovers(c *gin.Context, state *common.State) {
 func deleteAutoApprovers(c *gin.Context, state *common.State) {
 	existing, err := getAutoApproversFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse autoapprovers"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse autoApprovers"})
 		return
 	}
 	if existing == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "No autoapprovers found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "No autoApprovers found"})
 		return
 	}
 
 	// Remove the key entirely:
-	if err := state.UpdateKeyAndSave("autoapprovers", nil); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete autoapprovers"})
+	if err := state.UpdateKeyAndSave("autoApprovers", nil); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete autoApprovers"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "autoapprovers deleted"})
+	c.JSON(http.StatusOK, gin.H{"message": "autoApprovers deleted"})
 }
 
 // getAutoApproversFromState re-marshal state.Data["autoapprovers"] to *tsclient.ACLAutoApprovers
 func getAutoApproversFromState(state *common.State) (*tsclient.ACLAutoApprovers, error) {
-	raw := state.GetValue("autoapprovers")
+	raw := state.GetValue("autoApprovers")
 	if raw == nil {
 		return nil, nil
 	}
