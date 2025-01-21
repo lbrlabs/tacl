@@ -40,10 +40,6 @@ func getDERPMap(c *gin.Context, state *common.State) {
 		return
 	}
 	if dm == nil {
-		// If you want a 404:
-		// c.JSON(http.StatusNotFound, gin.H{"error": "No DERPMap found"})
-		// return
-		// Or return an empty one:
 		c.JSON(http.StatusOK, tsclient.ACLDERPMap{
 			Regions: map[int]*tsclient.ACLDERPRegion{},
 		})

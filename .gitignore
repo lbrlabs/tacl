@@ -1,1 +1,4 @@
 state.json
+**/terraform.tfstate
+**/terraform.tfstate.backup
+**/bin
