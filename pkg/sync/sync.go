@@ -91,21 +91,17 @@ func buildTailscaleACLJSON(state *common.State) (string, error) {
 func removeIDFields(obj interface{}) interface{} {
 	switch val := obj.(type) {
 	case []interface{}:
-		// array => recurse
 		for i, item := range val {
 			val[i] = removeIDFields(item)
 		}
 		return val
 	case map[string]interface{}:
-		// remove "id" key
 		delete(val, "id")
-		// also remove any other custom fields if you want
 		for k, v := range val {
 			val[k] = removeIDFields(v)
 		}
 		return val
 	default:
-		// scalar => return as is
 		return obj
 	}
 }
