@@ -229,19 +229,86 @@ Tacl leverages Tailscale's built in application capabilities, so you'll need to 
 
 You can specify the rest endpoints like `/acls` or `postures` to allow who's able to send requests, and specify methods like `GET` or `POST`. In order to communicate with tacl, you'll need a Tailscale client in the `src`.
 
+## State
+
+Tacl stores an intermediary state either in a local file or object store, which it syncs to Tailscale peridiocally. The state is not a valid Tailscale ACL, as Tacl adds some ID fields (which it strips out before syncing) to certain parts of the state in order to be able to effectively manage ACLs.
+
+### Local File State
+
+You can use a local file for state easily like so:
+
+```bash
+tacl serve --client-id=<your-client-id> --client-secret=<your-client-secret> --tailnet-name <your-tailnet> --storage=file://state.json
+```
+
+### S3 State
+
+If you'd like to store state in S3, simply use an S3 prefix:
+
+```bash
+tacl server --client-id=<your-client-id> --client-secret=<your-client-secret> --tailnet-name <your-tailnet> --storage=s3://lbriggs-tacl/state.json
+```
+
+You can use s3 compatible endpoints as well, see the `--s3-endpoint="s3.amazonaws.com"` and `--s3-region="us-east-1"` flags and corresponding environment variables.
+
+
 ## Getting Started
+
+You can initialize a basic working ACL with `tacl init`. This will bootstrap a default, permissive ACL that allows access to Tacl, sets up a tag and tagowner and syncs it to your state store:
+
+```json
+{
+    "acls": [
+      {
+        "action": "accept",
+        "dst": [
+          "*:*"
+        ],
+        "src": [
+          "*"
+        ]
+      }
+    ],
+    "autoApprovers": {},
+    "grants": [
+      {
+        "app": {
+          "lbrlabs.com/cap/tacl": [
+            {
+              "manager": {
+                "endpoints": [
+                  "*"
+                ],
+                "methods": [
+                  "*"
+                ]
+              }
+            }
+          ]
+        },
+        "dst": [
+          "tag:tacl"
+        ],
+        "src": [
+          "autogroup:admin"
+        ]
+      }
+    ],
+    "ssh": [],
+    "tagOwners": {
+      "tag:tacl": [
+        "autogroup:admin"
+      ]
+    }
+  }
+  
+```
 
 Tacl requires a Tailscale oauth client with the `auth_keys` write scope and the `policy_file` scope. From there, you can run it like so:
 
 ```bash
-go run main.go --client-id=<client-id>> --client-secret=<client-secret> --tailnet <tailnet-name>
+tacl serve --client-id=<client-id>> --client-secret=<client-secret> --tailnet <tailnet-name>
 ```
-
-I plan to improve the rollout experience once Tacl is close to feature complete.
-
-## State Storage
-
-Tacl has working support for a local `state.json` on disk, and I plan to implement support for object stores eventually, however that is currently untested.
 
 ## Limitations
 

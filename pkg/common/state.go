@@ -138,12 +138,13 @@ func (s *State) LoadFromStorage() {
 		s.loadFromS3()
 	default:
 		if s.Logger != nil {
-			s.Logger.Warn("Unrecognized storage scheme or not configured",
+			s.Logger.Fatal("Unrecognized storage scheme or not configured",
 				zap.String("storage", s.Storage),
 				zap.String("bucket", s.Bucket),
 				zap.String("objectKey", s.ObjectKey))
 		}
 	}
+	return
 }
 
 func (s *State) loadFromFile() {
@@ -155,7 +156,7 @@ func (s *State) loadFromFile() {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if s.Logger != nil {
-			s.Logger.Warn("Could not read state file",
+			s.Logger.Fatal("Could not read state file",
 				zap.String("path", path), zap.Error(err))
 		}
 		return
@@ -169,7 +170,7 @@ func (s *State) loadFromFile() {
 
 	if err := json.Unmarshal(data, &s.Data); err != nil {
 		if s.Logger != nil {
-			s.Logger.Warn("Could not unmarshal state data from file",
+			s.Logger.Fatal("Could not unmarshal state data from file",
 				zap.String("path", path),
 				zap.Error(err))
 		}
@@ -190,24 +191,22 @@ func (s *State) loadFromS3() {
 	reader, err := s.S3Client.GetObject(context.TODO(), s.Bucket, s.ObjectKey, minio.GetObjectOptions{})
 	if err != nil {
 		if s.Logger != nil {
-			s.Logger.Warn("Could not get object from S3",
+			s.Logger.Fatal("Could not get object from S3",
 				zap.String("bucket", s.Bucket),
 				zap.String("objectKey", s.ObjectKey),
 				zap.Error(err))
 		}
-		return
 	}
 	defer reader.Close()
 
 	data, err := io.ReadAll(reader)
 	if err != nil {
 		if s.Logger != nil {
-			s.Logger.Warn("Failed to read data from S3 object",
+			s.Logger.Fatal("Failed to read data from S3 object",
 				zap.String("bucket", s.Bucket),
 				zap.String("objectKey", s.ObjectKey),
 				zap.Error(err))
 		}
-		return
 	}
 	if s.Logger != nil && s.Debug {
 		s.Logger.Info("Successfully read S3 object bytes", zap.Int("byteCount", len(data)))
@@ -218,7 +217,7 @@ func (s *State) loadFromS3() {
 
 	if err := json.Unmarshal(data, &s.Data); err != nil {
 		if s.Logger != nil {
-			s.Logger.Warn("Could not unmarshal state data from S3",
+			s.Logger.Fatal("Could not unmarshal state data from S3",
 				zap.String("bucket", s.Bucket),
 				zap.String("objectKey", s.ObjectKey),
 				zap.Error(err))

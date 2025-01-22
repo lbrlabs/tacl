@@ -14,6 +14,7 @@ import (
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
 
+
 	// Existing route packages
 	"github.com/lbrlabs/tacl/pkg/acl/acls"
 	"github.com/lbrlabs/tacl/pkg/acl/acltests"
@@ -47,8 +48,20 @@ type InitCmd struct {
 	Force bool `help:"Do not prompt for confirmation, overwrite immediately."`
 }
 
-type Serve struct {
+type ServeCmd struct {
+	ClientID     string `help:"Tailscale OAuth client ID" env:"TACL_CLIENT_ID" required:"true"`
+	ClientSecret string `help:"Tailscale OAuth client secret" env:"TACL_CLIENT_SECRET" required:"true"`
+	Tags         string `help:"Comma-separated tags for ephemeral keys (e.g. 'tag:prod,tag:k8s')" default:"tag:tacl" env:"TACL_TAGS"`
+	Ephemeral    bool   `help:"Use ephemeral Tailscale node (no stored identity)" default:"true" env:"TACL_EPHEMERAL"`
+	Hostname     string `help:"Tailscale hostname" default:"tacl" env:"TACL_HOSTNAME"`
+	Port         int    `help:"Port to listen on" default:"8080" env:"TACL_PORT"`
+	StateDir     string `help:"Directory to store Tailscale node state if ephemeral=false" default:"./tacl-ts-state" env:"TACL_STATE_DIR"`
+	TailnetName  string `help:"Your Tailscale tailnet name (e.g. 'mycorp.com')" env:"TACL_TAILNET"`
 
+	SyncInterval time.Duration `help:"How often to push ACL state to Tailscale" default:"30s" env:"TACL_SYNC_INTERVAL"`
+}
+
+type VersionCmd struct {
 }
 
 // CLI defines the flags/environment variables for our command using Kong tags.
@@ -59,25 +72,13 @@ type CLI struct {
 	Storage string `help:"Storage location (file://path or s3://bucket[/key])" default:"file://state.json" env:"TACL_STORAGE"`
 
 	// Custom S3 config flags
-	S3Endpoint string `help:"Custom S3 endpoint (e.g. minio.local:9000). Defaults to s3.amazonaws.com if not set." env:"TACL_S3_ENDPOINT" name:"s3-endpoint"`
-	S3Region   string `help:"AWS or custom S3 region. Defaults to 'us-east-1' if not set." env:"TACL_S3_REGION" name:"s3-region"`
-
-	ClientID     string `help:"Tailscale OAuth client ID" env:"TACL_CLIENT_ID"`
-	ClientSecret string `help:"Tailscale OAuth client secret" env:"TACL_CLIENT_SECRET"`
-
-	Tags        string        `help:"Comma-separated tags for ephemeral keys (e.g. 'tag:prod,tag:k8s')" default:"tag:tacl" env:"TACL_TAGS"`
-	Ephemeral   bool          `help:"Use ephemeral Tailscale node (no stored identity)" default:"true" env:"TACL_EPHEMERAL"`
-	Hostname    string        `help:"Tailscale hostname" default:"tacl" env:"TACL_HOSTNAME"`
-	Port        int           `help:"Port to listen on" default:"8080" env:"TACL_PORT"`
-	StateDir    string        `help:"Directory to store Tailscale node state if ephemeral=false" default:"./tacl-ts-state" env:"TACL_STATE_DIR"`
-	TailnetName string        `help:"Your Tailscale tailnet name (e.g. 'mycorp.com')" env:"TACL_TAILNET"`
-
-	SyncInterval time.Duration `help:"How often to push ACL state to Tailscale" default:"30s" env:"TACL_SYNC_INTERVAL"`
-	Version      bool          `help:"Print version and exit" default:"false" env:"TACL_VERSION"`
+	S3Endpoint string `help:"Custom S3 endpoint (e.g. minio.local:9000). Defaults to s3.amazonaws.com if not set." default:"s3.amazonaws.com" env:"TACL_S3_ENDPOINT" name:"s3-endpoint"`
+	S3Region   string `help:"AWS or custom S3 region. Defaults to 'us-east-1' if not set." env:"TACL_S3_REGION" default:"us-east-1" name:"s3-region"`
 
 	// Subcommand: init
-	Init InitCmd `cmd:"" help:"Initialize TACL with a default ACL, overwriting existing state if user confirms."`
-	Serve Serve `cmd:"" help:"Start the TACL server."`
+	Init    InitCmd    `cmd:"" help:"Initialize TACL with a default ACL, overwriting existing state if user confirms."`
+	Serve   ServeCmd   `cmd:"" help:"Start the TACL server."`
+	Version VersionCmd `cmd:"" help:"Print the version."`
 }
 
 // main parses flags and dispatches to either the init subcommand or the normal server flow.
@@ -91,11 +92,6 @@ func main() {
 		kong.Description("A Tailscale-based ACL management server"),
 	)
 
-	if cli.Version {
-		fmt.Println("Version:", Version)
-		return
-	}
-
 	switch kctx.Command() {
 	case "init":
 		// The user wants to run the `init` subcommand
@@ -104,9 +100,12 @@ func main() {
 		}
 		return
 	case "serve":
-		runMain(&cli)
+		runMain(&cli, &cli.Serve)
+	case "version":
+		fmt.Println("Version:", Version)
+		return
 	default:
-		runMain(&cli)
+		runMain(&cli, &cli.Serve)
 	}
 }
 
@@ -182,7 +181,7 @@ func runInit(cli CLI) error {
 	return nil
 }
 
-func runMain(cli *CLI) {
+func runMain(cli *CLI, serve *ServeCmd) {
 	logger := common.InitializeLogger(cli.Debug)
 	defer logger.Sync()
 
@@ -228,8 +227,8 @@ func runMain(cli *CLI) {
 
 	// Create tsnet server
 	tsServer := &tsnet.Server{
-		Hostname:  cli.Hostname,
-		Ephemeral: cli.Ephemeral,
+		Hostname:  serve.Hostname,
+		Ephemeral: serve.Ephemeral,
 		Logf: func(format string, args ...interface{}) {
 			logger.With(zap.String("component", "tsnet"), zap.String("tsnet_log_source", "backend")).
 				Sugar().
@@ -241,8 +240,8 @@ func runMain(cli *CLI) {
 				Infof(format, args...)
 		},
 	}
-	if !cli.Ephemeral {
-		tsServer.Dir = cli.StateDir
+	if !serve.Ephemeral {
+		tsServer.Dir = serve.StateDir
 	}
 
 	if err := tsServer.Start(); err != nil {
@@ -295,14 +294,15 @@ func runMain(cli *CLI) {
 	}
 
 	// If user provided client-id & secret, do ephemeral key approach
-	oidcEnabled := (cli.ClientID != "" && cli.ClientSecret != "")
+	oidcEnabled := (serve.ClientID != "" && serve.ClientSecret != "")
+
 	var adminClient *tailscale.Client
 
 	if oidcEnabled {
 		// Build Tailscale Admin client using OAuth2
 		creds := clientcredentials.Config{
-			ClientID:     cli.ClientID,
-			ClientSecret: cli.ClientSecret,
+			ClientID:     serve.ClientID,
+			ClientSecret: serve.ClientSecret,
 			TokenURL:     "https://login.tailscale.com/api/v2/oauth/token",
 		}
 		adminClient = tailscale.NewClient("-", nil)
@@ -337,7 +337,7 @@ func runMain(cli *CLI) {
 						Create: tailscale.KeyDeviceCreateCapabilities{
 							Reusable:      false,
 							Preauthorized: true,
-							Tags:          strings.Split(cli.Tags, ","),
+							Tags:          strings.Split(serve.Tags, ","),
 						},
 					},
 				}
@@ -371,14 +371,14 @@ func runMain(cli *CLI) {
 	}
 
 	// If we have adminClient + tailnetName, let's start ACL sync
-	if adminClient != nil && cli.TailnetName != "" {
-		sync.Start(state, adminClient, cli.TailnetName, cli.SyncInterval)
+	if adminClient != nil && serve.TailnetName != "" {
+		sync.Start(state, adminClient, serve.TailnetName, serve.SyncInterval)
 	} else {
 		logger.Warn("Skipping ACL sync: either no tailnet provided or no OAuth2 admin client.")
 	}
 
 	// Listen on Tailscale interface
-	ln, err := tsServer.Listen("tcp", fmt.Sprintf(":%d", cli.Port))
+	ln, err := tsServer.Listen("tcp", fmt.Sprintf(":%d", serve.Port))
 	if err != nil {
 		logger.Fatal("tsnet.Listen failed", zap.Error(err))
 	}
@@ -386,7 +386,7 @@ func runMain(cli *CLI) {
 
 	logger.Info("Starting tacl server on Tailscale network",
 		zap.String("addr", ln.Addr().String()),
-		zap.Int("port", cli.Port),
+		zap.Int("port", serve.Port),
 	)
 
 	if err := r.RunListener(ln); err != nil {

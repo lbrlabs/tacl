@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM cgr.dev/chainguard/go:latest as builder
+FROM cgr.dev/chainguard/go:latest AS builder
 
 WORKDIR /src
 
@@ -10,7 +10,7 @@ RUN go mod download
 # Copy the remaining project files
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /usr/local/bin/tacl ./cmd/tacl
+RUN CGO_ENABLED=0 GOOS=linux go build -o /src/tacl .
 
 FROM cgr.dev/chainguard/static:latest
 
@@ -18,9 +18,11 @@ FROM cgr.dev/chainguard/static:latest
 ENV TACL_PORT=8080
 
 # Copy the binary from the builder stage
-COPY --from=builder /usr/local/bin/tacl /usr/local/bin/tacl
+COPY --from=builder /src/tacl /usr/local/bin/tacl
 
 EXPOSE 8080
 
 # Launch
 ENTRYPOINT ["/usr/local/bin/tacl"]
+
+CMD ["serve"]
