@@ -16,37 +16,12 @@ builds:
     ldflags:
       - "-X main.Version={{.Version}}"
 
-  - id: terraform
-    dir: ./terraform
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - darwin
-      - windows
-      - linux
-    goarch:
-      - amd64
-      - arm64
-    ldflags:
-      - "-X main.Version={{.Version}}"
-    binary: terraform-plugin-tacl
-
 archives:
   # Archive containing only the `tacl` binary
   - id: tacl-archive
     format: tar.gz
     builds:
       - tacl
-    name_template: "{{ .Binary }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
-    format_overrides:
-      - goos: windows
-        format: zip
-
-  # Archive containing only the `terraform` plugin
-  - id: terraform-archive
-    format: tar.gz
-    builds:
-      - terraform
     name_template: "{{ .Binary }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows

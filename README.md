@@ -168,7 +168,7 @@ There are endpoints for almost all resources in Tailscale, so if you want to add
 
 ## Terraform
 
-Tacl also comes with an experimental Terraform provider that you can use to push resources to Tacl. So now, you can do:
+Tacl also comes with an [experimental Terraform provider](https://github.com/lbrlabs/terraform-provider-tacl) that you can use to push resources to Tacl.
 
 ```hcl
 terraform {
