@@ -1,0 +1,45 @@
+{
+    "acls": [
+      {
+        "action": "accept",
+        "dst": [
+          "*:*"
+        ],
+        "src": [
+          "*"
+        ]
+      }
+    ],
+    "autoApprovers": {},
+    "grants": [
+      {
+        "app": {
+          "lbrlabs.com/cap/tacl": [
+            {
+              "manager": {
+                "endpoints": [
+                  "*"
+                ],
+                "methods": [
+                  "*"
+                ]
+              }
+            }
+          ]
+        },
+        "dst": [
+          "tag:tacl"
+        ],
+        "src": [
+          "autogroup:admin"
+        ]
+      }
+    ],
+    "ssh": [],
+    "tagOwners": {
+      "tag:tacl": [
+        "autogroup:admin"
+      ]
+    }
+  }
+  

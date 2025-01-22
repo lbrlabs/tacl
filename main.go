@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	_ "embed"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +14,7 @@ import (
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
 
+	// Existing route packages
 	"github.com/lbrlabs/tacl/pkg/acl/acls"
 	"github.com/lbrlabs/tacl/pkg/acl/acltests"
 	"github.com/lbrlabs/tacl/pkg/acl/autoapprovers"
@@ -33,8 +36,20 @@ import (
 	"tailscale.com/tsnet"
 )
 
+//go:embed default.json
+var embeddedDefaultACL []byte
+
 // Version is the current version of the application.
 var Version = "dev"
+
+// InitCmd is the subcommand for initializing the TACL state with a default ACL.
+type InitCmd struct {
+	Force bool `help:"Do not prompt for confirmation, overwrite immediately."`
+}
+
+type Serve struct {
+
+}
 
 // CLI defines the flags/environment variables for our command using Kong tags.
 type CLI struct {
@@ -50,18 +65,22 @@ type CLI struct {
 	ClientID     string `help:"Tailscale OAuth client ID" env:"TACL_CLIENT_ID"`
 	ClientSecret string `help:"Tailscale OAuth client secret" env:"TACL_CLIENT_SECRET"`
 
-	Tags        string `help:"Comma-separated tags for ephemeral keys (e.g. 'tag:prod,tag:k8s')" default:"tag:tacl" env:"TACL_TAGS"`
-	Ephemeral   bool   `help:"Use ephemeral Tailscale node (no stored identity)" default:"true" env:"TACL_EPHEMERAL"`
-	Hostname    string `help:"Tailscale hostname" default:"tacl" env:"TACL_HOSTNAME"`
-	Port        int    `help:"Port to listen on" default:"8080" env:"TACL_PORT"`
-	StateDir    string `help:"Directory to store Tailscale node state if ephemeral=false" default:"./tacl-ts-state" env:"TACL_STATE_DIR"`
-	TailnetName string `help:"Your Tailscale tailnet name (e.g. 'mycorp.com')" env:"TACL_TAILNET"`
+	Tags        string        `help:"Comma-separated tags for ephemeral keys (e.g. 'tag:prod,tag:k8s')" default:"tag:tacl" env:"TACL_TAGS"`
+	Ephemeral   bool          `help:"Use ephemeral Tailscale node (no stored identity)" default:"true" env:"TACL_EPHEMERAL"`
+	Hostname    string        `help:"Tailscale hostname" default:"tacl" env:"TACL_HOSTNAME"`
+	Port        int           `help:"Port to listen on" default:"8080" env:"TACL_PORT"`
+	StateDir    string        `help:"Directory to store Tailscale node state if ephemeral=false" default:"./tacl-ts-state" env:"TACL_STATE_DIR"`
+	TailnetName string        `help:"Your Tailscale tailnet name (e.g. 'mycorp.com')" env:"TACL_TAILNET"`
 
 	SyncInterval time.Duration `help:"How often to push ACL state to Tailscale" default:"30s" env:"TACL_SYNC_INTERVAL"`
+	Version      bool          `help:"Print version and exit" default:"false" env:"TACL_VERSION"`
 
-	Version bool `help:"Print version and exit" default:"false" env:"TACL_VERSION"`
+	// Subcommand: init
+	Init InitCmd `cmd:"" help:"Initialize TACL with a default ACL, overwriting existing state if user confirms."`
+	Serve Serve `cmd:"" help:"Start the TACL server."`
 }
 
+// main parses flags and dispatches to either the init subcommand or the normal server flow.
 func main() {
 	tailscale.I_Acknowledge_This_API_Is_Unstable = true
 
@@ -71,14 +90,99 @@ func main() {
 		kong.Name("tacl"),
 		kong.Description("A Tailscale-based ACL management server"),
 	)
-	_ = kctx
 
 	if cli.Version {
 		fmt.Println("Version:", Version)
 		return
 	}
 
-	// Initialize zap logger
+	switch kctx.Command() {
+	case "init":
+		// The user wants to run the `init` subcommand
+		if err := runInit(cli); err != nil {
+			log.Fatalf("Failed init: %v", err)
+		}
+		return
+	case "serve":
+		runMain(&cli)
+	default:
+		runMain(&cli)
+	}
+}
+
+// runInit implements the `init` subcommand logic
+func runInit(cli CLI) error {
+	logger := common.InitializeLogger(cli.Debug)
+	defer logger.Sync()
+
+	// If user passes --force, skip the prompt
+	skipPrompt := cli.Init.Force
+
+	// Setup the shared State object
+	state := &common.State{
+		Data:    make(map[string]interface{}),
+		Storage: cli.Storage,
+		Logger:  logger,
+		Debug:   cli.Debug,
+	}
+
+	// Possibly set up S3 if storage is s3://
+	if strings.HasPrefix(cli.Storage, "s3://") {
+		s3Client, bucket, objectKey, err := common.InitializeS3Client(
+			cli.Storage,
+			cli.S3Endpoint,
+			cli.S3Region,
+			logger,
+		)
+		if err != nil {
+			return fmt.Errorf("init: could not init S3: %w", err)
+		}
+		state.S3Client = s3Client
+		state.Bucket = bucket
+		state.ObjectKey = objectKey
+	} else if !strings.HasPrefix(cli.Storage, "file://") {
+		return fmt.Errorf("invalid storage scheme %q (must be file:// or s3://)", cli.Storage)
+	}
+
+	// Load existing data (if any)
+	state.LoadFromStorage()
+
+	if len(state.Data) > 0 && !skipPrompt {
+		// There's existing data in the state
+		fmt.Println("WARNING: This will overwrite the current ACL state with a default allow-all ACL.")
+		fmt.Printf("Are you sure you want to proceed? (y/N): ")
+		var answer string
+		_, _ = fmt.Scanln(&answer)
+		answer = strings.ToLower(strings.TrimSpace(answer))
+		if answer != "y" && answer != "yes" {
+			fmt.Println("Cancelled init.")
+			return nil
+		}
+	}
+
+	// Overwrite with the embedded default ACL
+	var data map[string]interface{}
+	if err := json.Unmarshal(embeddedDefaultACL, &data); err != nil {
+		return fmt.Errorf("could not unmarshal embedded default ACL: %w", err)
+	}
+
+	// Assign to state
+	state.RWLock.Lock()
+	state.Data = data
+	state.RWLock.Unlock()
+
+	// Save to storage
+	jBytes, err := json.MarshalIndent(state.Data, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal new state: %w", err)
+	}
+	state.SaveBytesToStorage(jBytes)
+
+	fmt.Println("Default ACL has been initialized and uploaded (or written).")
+	return nil
+}
+
+func runMain(cli *CLI) {
 	logger := common.InitializeLogger(cli.Debug)
 	defer logger.Sync()
 
@@ -116,7 +220,6 @@ func main() {
 		state.Bucket = bucket
 		state.ObjectKey = objectKey
 	} else if !strings.HasPrefix(cli.Storage, "file://") {
-		// If not file:// or s3://, bail out
 		logger.Fatal("Invalid storage scheme. Must be file:// or s3://")
 	}
 
@@ -138,7 +241,6 @@ func main() {
 				Infof(format, args...)
 		},
 	}
-
 	if !cli.Ephemeral {
 		tsServer.Dir = cli.StateDir
 	}
@@ -171,7 +273,7 @@ func main() {
 	hosts.RegisterRoutes(r, state)
 	postures.RegisterRoutes(r, state)
 
-	// Some basic endpoints
+	// Basic endpoints
 	r.GET("/state", func(c *gin.Context) {
 		c.String(http.StatusOK, state.ToJSON())
 	})
@@ -192,7 +294,6 @@ func main() {
 		})
 	}
 
-	//-----------------------------------
 	// If user provided client-id & secret, do ephemeral key approach
 	oidcEnabled := (cli.ClientID != "" && cli.ClientSecret != "")
 	var adminClient *tailscale.Client
@@ -269,8 +370,7 @@ func main() {
 		logger.Info("No client-id/secret provided; if Tailscale needs login, check logs for a URL.")
 	}
 
-	//-----------------------------------
-	// If we have adminClient + tailnetName, let's create an API key & start ACL sync
+	// If we have adminClient + tailnetName, let's start ACL sync
 	if adminClient != nil && cli.TailnetName != "" {
 		sync.Start(state, adminClient, cli.TailnetName, cli.SyncInterval)
 	} else {

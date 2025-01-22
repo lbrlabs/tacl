@@ -307,3 +307,8 @@ func InitializeS3Client(storageURL, s3Endpoint, s3Region string, logger *zap.Log
 
 	return s3Client, bucket, objectKey, nil
 }
+
+// SaveBytesToStorage provides a convenient helper...
+func (s *State) SaveBytesToStorage(jsonData []byte) {
+    s.saveToStorage(jsonData)
+}
