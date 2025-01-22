@@ -32,6 +32,11 @@ import (
 	"tailscale.com/tsnet"
 )
 
+var (
+	// Version is the current version of the application.
+	Version = "dev"
+)
+
 func main() {
 	tailscale.I_Acknowledge_This_API_Is_Unstable = true
 
@@ -48,8 +53,14 @@ func main() {
 
 	tailnetName := flag.String("tailnet", "", "Your Tailscale tailnet name, e.g. 'mycorp.com'")
 	syncInterval := flag.Duration("sync-interval", 30*time.Second, "How often to push ACL state to Tailscale")
+	version := flag.Bool("version", false, "Print version and exit")
 
 	flag.Parse()
+
+	if *version {
+		fmt.Println("Version:", Version)
+		return
+	}
 
 	// Initialize zap logger
 	logger := common.InitializeLogger(*debug)
