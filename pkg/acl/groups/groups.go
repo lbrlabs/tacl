@@ -9,10 +9,10 @@ import (
 	"github.com/lbrlabs/tacl/pkg/common"
 )
 
-// Group is the user-facing structure. 
+// Group is the user-facing structure.
 type Group struct {
-	Name        string   `json:"name" binding:"required"`
-	Members     []string `json:"members"`
+	Name    string   `json:"name" binding:"required"`
+	Members []string `json:"members"`
 }
 
 // RegisterRoutes wires up the /groups endpoints.

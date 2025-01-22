@@ -3,8 +3,10 @@ module github.com/lbrlabs/tacl
 go 1.23.2
 
 require (
+	github.com/alecthomas/kong v1.6.1
 	github.com/gin-contrib/zap v1.1.4
 	github.com/gin-gonic/gin v1.10.0
+	github.com/google/uuid v1.6.0
 	github.com/minio/minio-go/v7 v7.0.83
 	github.com/tailscale/tailscale-client-go/v2 v2.0.0-20241217012816-8143c7dc1766
 	go.uber.org/zap v1.27.0
@@ -56,7 +58,6 @@ require (
 	github.com/google/btree v1.1.2 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/nftables v0.2.1-0.20240414091927-5e242ec57806 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/csrf v1.7.2 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/hdevalence/ed25519consensus v0.2.0 // indirect
