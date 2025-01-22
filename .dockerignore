@@ -1,0 +1,7 @@
+terraform/
+state.json
+.github/
+LICENSE
+go.work
+go.work.sum
+README.md

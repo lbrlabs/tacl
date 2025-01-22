@@ -1,33 +1,33 @@
 package main
 
 import (
-    "context"
-    "log"
-    "flag"
+	"context"
+	"flag"
+	"log"
 
-    "github.com/hashicorp/terraform-plugin-framework/providerserver"
-    "github.com/lbrlabs/tacl/terraform/provider"
+	"github.com/hashicorp/terraform-plugin-framework/providerserver"
+	"github.com/lbrlabs/tacl/terraform/provider"
 )
 
 var (
-    Version = "dev"
+	Version = "dev"
 )
 
 func main() {
 
-    version := flag.Bool("version", false, "Print version and exit")
+	version := flag.Bool("version", false, "Print version and exit")
 
-    flag.Parse()
+	flag.Parse()
 
-    if *version {
-        log.Printf("terraform-provider-tacl %s", Version)
-        return
-    }
+	if *version {
+		log.Printf("terraform-provider-tacl %s", Version)
+		return
+	}
 
-    err := providerserver.Serve(context.Background(), provider.New, providerserver.ServeOpts{
-        Address: "registry.terraform.io/lbrlabs/tacl",
-    })
-    if err != nil {
-        log.Fatal(err)
-    }
+	err := providerserver.Serve(context.Background(), provider.New, providerserver.ServeOpts{
+		Address: "registry.terraform.io/lbrlabs/tacl",
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 }

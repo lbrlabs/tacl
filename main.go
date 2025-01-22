@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/alecthomas/kong"
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
 	"github.com/lbrlabs/tacl/pkg/acl/acls"
@@ -32,61 +32,73 @@ import (
 	"tailscale.com/tsnet"
 )
 
-var (
-	// Version is the current version of the application.
-	Version = "dev"
-)
+// Version is the current version of the application.
+var Version = "dev"
+
+// CLI defines the flags/environment variables for our command using Kong tags.
+type CLI struct {
+	Debug        bool          `help:"Print debug logs" default:"false" env:"TACL_DEBUG"`
+	Storage      string        `help:"Storage location (file://path or s3://bucket)" default:"file://state.json" env:"TACL_STORAGE"`
+	ClientID     string        `help:"Tailscale OAuth client ID (optional)" env:"TACL_CLIENT_ID"`
+	ClientSecret string        `help:"Tailscale OAuth client secret (optional)" env:"TACL_CLIENT_SECRET"`
+	Tags         string        `help:"Comma-separated tags for ephemeral keys (e.g. 'tag:prod,tag:k8s')" default:"tag:tacl" env:"TACL_TAGS"`
+	Ephemeral    bool          `help:"Use ephemeral Tailscale node (no stored identity)" default:"true" env:"TACL_EPHEMERAL"`
+	Hostname     string        `help:"Tailscale hostname" default:"tacl" env:"TACL_HOSTNAME"`
+	Port         int           `help:"Port to listen on" default:"8080" env:"TACL_PORT"`
+	StateDir     string        `help:"Directory to store Tailscale node state if ephemeral=false" default:"./tacl-ts-state" env:"TACL_STATE_DIR"`
+	TailnetName  string        `help:"Your Tailscale tailnet name (e.g. 'mycorp.com')" env:"TACL_TAILNET"`
+	SyncInterval time.Duration `help:"How often to push ACL state to Tailscale" default:"30s" env:"TACL_SYNC_INTERVAL"`
+	Version      bool          `help:"Print version and exit" default:"false" env:"TACL_VERSION"`
+}
 
 func main() {
 	tailscale.I_Acknowledge_This_API_Is_Unstable = true
 
-	// Flags
-	debug := flag.Bool("debug", false, "Print debug logs")
-	storage := flag.String("storage", "file://state.json", "Storage location (file://path or s3://bucket)")
-	clientID := flag.String("client-id", "", "Tailscale OAuth client ID (optional)")
-	clientSecret := flag.String("client-secret", "", "Tailscale OAuth client secret (optional)")
-	tags := flag.String("tags", "tag:tacl", "Comma-separated tags for ephemeral keys (e.g. 'tag:prod,tag:k8s')")
-	ephemeral := flag.Bool("ephemeral", true, "Whether the Tailscale node is ephemeral (no stored identity). If false, a Dir is used.")
-	hostname := flag.String("hostname", "tacl", "Tailscale hostname")
-	port := flag.Int("port", 8080, "Port to listen on")
-	stateDir := flag.String("state-dir", "./tacl-ts-state", "Directory to store Tailscale node state if ephemeral=false")
+	// Parse command-line arguments & environment variables via Kong.
+	var cli CLI
+	kctx := kong.Parse(&cli,
+		kong.Name("tacl"),
+		kong.Description("A Tailscale-based ACL management server"),
+	)
+	_ = kctx
 
-	tailnetName := flag.String("tailnet", "", "Your Tailscale tailnet name, e.g. 'mycorp.com'")
-	syncInterval := flag.Duration("sync-interval", 30*time.Second, "How often to push ACL state to Tailscale")
-	version := flag.Bool("version", false, "Print version and exit")
-
-	flag.Parse()
-
-	if *version {
+	if cli.Version {
 		fmt.Println("Version:", Version)
 		return
 	}
 
 	// Initialize zap logger
-	logger := common.InitializeLogger(*debug)
+	logger := common.InitializeLogger(cli.Debug)
 	defer logger.Sync()
 
 	// Setup standard library -> Zap
 	log.SetFlags(0)
-	log.SetOutput(common.NewConditionalZapWriter(*debug, logger))
+	log.SetOutput(common.NewConditionalZapWriter(cli.Debug, logger))
 
-	// Initialize our shared state
+	if cli.Debug {
+		logger.Debug("Debug mode enabled")
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	// Initialize shared state
 	state := &common.State{
 		Data:    make(map[string]interface{}),
-		Storage: *storage,
+		Storage: cli.Storage,
 		Logger:  logger,
-		Debug:   *debug,
+		Debug:   cli.Debug,
 	}
 
 	// Possibly set up S3
-	if strings.HasPrefix(*storage, "s3://") {
-		s3Client, bucket, err := common.InitializeS3Client(*storage)
+	if strings.HasPrefix(cli.Storage, "s3://") {
+		s3Client, bucket, err := common.InitializeS3Client(cli.Storage)
 		if err != nil {
 			logger.Fatal("Failed to initialize S3 storage", zap.Error(err))
 		}
 		state.S3Client = s3Client
 		state.Bucket = bucket
-	} else if !strings.HasPrefix(*storage, "file://") {
+	} else if !strings.HasPrefix(cli.Storage, "file://") {
 		logger.Fatal("Invalid storage scheme. Must be file:// or s3://")
 	}
 
@@ -95,8 +107,8 @@ func main() {
 
 	// Create tsnet server
 	tsServer := &tsnet.Server{
-		Hostname:  *hostname,
-		Ephemeral: *ephemeral,
+		Hostname:  cli.Hostname,
+		Ephemeral: cli.Ephemeral,
 		Logf: func(format string, args ...interface{}) {
 			logger.With(zap.String("component", "tsnet"), zap.String("tsnet_log_source", "backend")).
 				Sugar().
@@ -108,8 +120,9 @@ func main() {
 				Infof(format, args...)
 		},
 	}
-	if !*ephemeral {
-		tsServer.Dir = *stateDir
+
+	if !cli.Ephemeral {
+		tsServer.Dir = cli.StateDir
 	}
 
 	if err := tsServer.Start(); err != nil {
@@ -120,10 +133,11 @@ func main() {
 	// Build the Gin engine
 	r := gin.New()
 
+	// remove trusted proxies because we're using Tailscale for auth
+	r.SetTrustedProxies(nil)
+
 	// Add Tailscale-based capabilities middleware
 	r.Use(cap.TailscaleAuthMiddleware(tsServer, logger))
-
-	// gin zap logger
 	r.Use(ginzap.Ginzap(logger, time.RFC3339, true))
 	r.Use(ginzap.RecoveryWithZap(logger, true))
 
@@ -147,8 +161,8 @@ func main() {
 		c.String(200, "OK")
 	})
 
-	if *debug {
-		// Additional debug info after POST/PUT/DELETE
+	// Optionally print debug info
+	if cli.Debug {
 		r.Use(func(c *gin.Context) {
 			c.Next()
 			method := c.Request.Method
@@ -160,15 +174,15 @@ func main() {
 		})
 	}
 
-	// If user provided client-id, client-secret, do ephemeral key approach
-	oidcEnabled := (*clientID != "" && *clientSecret != "")
-	var adminClient *tailscale.Client // We'll use this to create an API key
+	// If user provided client-id & secret, do ephemeral key approach
+	oidcEnabled := (cli.ClientID != "" && cli.ClientSecret != "")
+	var adminClient *tailscale.Client
 
 	if oidcEnabled {
 		// Build Tailscale Admin client using OAuth2
 		creds := clientcredentials.Config{
-			ClientID:     *clientID,
-			ClientSecret: *clientSecret,
+			ClientID:     cli.ClientID,
+			ClientSecret: cli.ClientSecret,
 			TokenURL:     "https://login.tailscale.com/api/v2/oauth/token",
 		}
 		adminClient = tailscale.NewClient("-", nil)
@@ -179,7 +193,6 @@ func main() {
 			logger.Fatal("Could not get local client from tsnet server", zap.Error(err))
 		}
 
-		// Wait until Tailscale is Running or do ephemeral keys if needed
 		ctx := context.Background()
 		loginDone := false
 		machineAuthShown := false
@@ -193,7 +206,6 @@ func main() {
 			switch st.BackendState {
 			case "Running":
 				break waitOnline
-
 			case "NeedsLogin":
 				if loginDone {
 					break
@@ -205,7 +217,7 @@ func main() {
 						Create: tailscale.KeyDeviceCreateCapabilities{
 							Reusable:      false,
 							Preauthorized: true,
-							Tags:          strings.Split(*tags, ","),
+							Tags:          strings.Split(cli.Tags, ","),
 						},
 					},
 				}
@@ -214,7 +226,6 @@ func main() {
 					logger.Fatal("Failed creating ephemeral auth key via Admin API", zap.Error(err))
 				}
 
-				// Start tailscaled with ephemeral key
 				if err := lc.Start(ctx, ipn.Options{AuthKey: authKey}); err != nil {
 					logger.Fatal("Failed to Start Tailscale with ephemeral key", zap.Error(err))
 				}
@@ -229,7 +240,6 @@ func main() {
 					logger.Info("Machine approval required; visit the Tailscale admin panel to approve.")
 					machineAuthShown = true
 				}
-
 			default:
 				// keep waiting
 			}
@@ -241,17 +251,14 @@ func main() {
 	}
 
 	// If we have adminClient + tailnetName, let's create an API key & start ACL sync
-	if adminClient != nil && *tailnetName != "" {
-		// Start ACL sync
-		// direct usage of the adminClient to push ACL
-		sync.Start(state, adminClient, *tailnetName, *syncInterval)
-
+	if adminClient != nil && cli.TailnetName != "" {
+		sync.Start(state, adminClient, cli.TailnetName, cli.SyncInterval)
 	} else {
 		logger.Warn("Skipping ACL sync: either no tailnet provided or no OAuth2 admin client.")
 	}
 
 	// Listen on Tailscale interface
-	ln, err := tsServer.Listen("tcp", fmt.Sprintf(":%d", *port))
+	ln, err := tsServer.Listen("tcp", fmt.Sprintf(":%d", cli.Port))
 	if err != nil {
 		logger.Fatal("tsnet.Listen failed", zap.Error(err))
 	}
@@ -259,7 +266,7 @@ func main() {
 
 	logger.Info("Starting tacl server on Tailscale network",
 		zap.String("addr", ln.Addr().String()),
-		zap.Int("port", *port),
+		zap.Int("port", cli.Port),
 	)
 
 	if err := r.RunListener(ln); err != nil {

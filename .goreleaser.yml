@@ -5,10 +5,7 @@ before:
     - go mod tidy
 
 builds:
-  # --- Main binary build ---
-  - id: main
-    env:
-      - CGO_ENABLED=0
+  - id: tacl
     goos:
       - darwin
       - windows
@@ -35,18 +32,22 @@ builds:
     binary: terraform-plugin-tacl
 
 archives:
-  - format: tar.gz
+  # Archive containing only the `tacl` binary
+  - id: tacl-archive
+    format: tar.gz
     builds:
-      - main
+      - tacl
+    name_template: "{{ .Binary }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+
+  # Archive containing only the `terraform` plugin
+  - id: terraform-archive
+    format: tar.gz
+    builds:
       - terraform
-    name_template: >-
-      {{ .ProjectName }}_
-      {{- title .Os }}_
-      {{- if eq .Arch "amd64" }}x86_64
-      {{- else if eq .Arch "386" }}i386
-      {{- else }}{{ .Arch }}{{ end }}
-      {{- if .Arm }}v{{ .Arm }}{{ end }}
-    # use zip for windows archives
+    name_template: "{{ .Binary }}-{{ .Tag }}-{{ .Os }}-{{ .Arch }}"
     format_overrides:
       - goos: windows
         format: zip
