@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/alecthomas/kong"
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
+
 	"github.com/lbrlabs/tacl/pkg/acl/acls"
 	"github.com/lbrlabs/tacl/pkg/acl/acltests"
 	"github.com/lbrlabs/tacl/pkg/acl/autoapprovers"
@@ -24,8 +26,8 @@ import (
 	"github.com/lbrlabs/tacl/pkg/cap"
 	"github.com/lbrlabs/tacl/pkg/common"
 	"github.com/lbrlabs/tacl/pkg/sync"
-	"go.uber.org/zap"
 
+	"go.uber.org/zap"
 	"golang.org/x/oauth2/clientcredentials"
 	"tailscale.com/client/tailscale"
 	"tailscale.com/ipn"
@@ -37,18 +39,28 @@ var Version = "dev"
 
 // CLI defines the flags/environment variables for our command using Kong tags.
 type CLI struct {
-	Debug        bool          `help:"Print debug logs" default:"false" env:"TACL_DEBUG"`
-	Storage      string        `help:"Storage location (file://path or s3://bucket)" default:"file://state.json" env:"TACL_STORAGE"`
-	ClientID     string        `help:"Tailscale OAuth client ID (optional)" env:"TACL_CLIENT_ID"`
-	ClientSecret string        `help:"Tailscale OAuth client secret (optional)" env:"TACL_CLIENT_SECRET"`
-	Tags         string        `help:"Comma-separated tags for ephemeral keys (e.g. 'tag:prod,tag:k8s')" default:"tag:tacl" env:"TACL_TAGS"`
-	Ephemeral    bool          `help:"Use ephemeral Tailscale node (no stored identity)" default:"true" env:"TACL_EPHEMERAL"`
-	Hostname     string        `help:"Tailscale hostname" default:"tacl" env:"TACL_HOSTNAME"`
-	Port         int           `help:"Port to listen on" default:"8080" env:"TACL_PORT"`
-	StateDir     string        `help:"Directory to store Tailscale node state if ephemeral=false" default:"./tacl-ts-state" env:"TACL_STATE_DIR"`
-	TailnetName  string        `help:"Your Tailscale tailnet name (e.g. 'mycorp.com')" env:"TACL_TAILNET"`
+	Debug bool `help:"Print debug logs" default:"false" env:"TACL_DEBUG"`
+
+	// Storage
+	Storage string `help:"Storage location (file://path or s3://bucket[/key])" default:"file://state.json" env:"TACL_STORAGE"`
+
+	// Custom S3 config flags
+	S3Endpoint string `help:"Custom S3 endpoint (e.g. minio.local:9000). Defaults to s3.amazonaws.com if not set." env:"TACL_S3_ENDPOINT" name:"s3-endpoint"`
+	S3Region   string `help:"AWS or custom S3 region. Defaults to 'us-east-1' if not set." env:"TACL_S3_REGION" name:"s3-region"`
+
+	ClientID     string `help:"Tailscale OAuth client ID" env:"TACL_CLIENT_ID"`
+	ClientSecret string `help:"Tailscale OAuth client secret" env:"TACL_CLIENT_SECRET"`
+
+	Tags        string `help:"Comma-separated tags for ephemeral keys (e.g. 'tag:prod,tag:k8s')" default:"tag:tacl" env:"TACL_TAGS"`
+	Ephemeral   bool   `help:"Use ephemeral Tailscale node (no stored identity)" default:"true" env:"TACL_EPHEMERAL"`
+	Hostname    string `help:"Tailscale hostname" default:"tacl" env:"TACL_HOSTNAME"`
+	Port        int    `help:"Port to listen on" default:"8080" env:"TACL_PORT"`
+	StateDir    string `help:"Directory to store Tailscale node state if ephemeral=false" default:"./tacl-ts-state" env:"TACL_STATE_DIR"`
+	TailnetName string `help:"Your Tailscale tailnet name (e.g. 'mycorp.com')" env:"TACL_TAILNET"`
+
 	SyncInterval time.Duration `help:"How often to push ACL state to Tailscale" default:"30s" env:"TACL_SYNC_INTERVAL"`
-	Version      bool          `help:"Print version and exit" default:"false" env:"TACL_VERSION"`
+
+	Version bool `help:"Print version and exit" default:"false" env:"TACL_VERSION"`
 }
 
 func main() {
@@ -90,15 +102,22 @@ func main() {
 		Debug:   cli.Debug,
 	}
 
-	// Possibly set up S3
+	// Possibly set up S3 if storage is s3://
 	if strings.HasPrefix(cli.Storage, "s3://") {
-		s3Client, bucket, err := common.InitializeS3Client(cli.Storage)
+		s3Client, bucket, objectKey, err := common.InitializeS3Client(
+			cli.Storage,
+			cli.S3Endpoint,
+			cli.S3Region,
+			logger,
+		)
 		if err != nil {
 			logger.Fatal("Failed to initialize S3 storage", zap.Error(err))
 		}
 		state.S3Client = s3Client
 		state.Bucket = bucket
+		state.ObjectKey = objectKey
 	} else if !strings.HasPrefix(cli.Storage, "file://") {
+		// If not file:// or s3://, bail out
 		logger.Fatal("Invalid storage scheme. Must be file:// or s3://")
 	}
 
@@ -155,10 +174,10 @@ func main() {
 
 	// Some basic endpoints
 	r.GET("/state", func(c *gin.Context) {
-		c.String(200, state.ToJSON())
+		c.String(http.StatusOK, state.ToJSON())
 	})
 	r.GET("/healthz", func(c *gin.Context) {
-		c.String(200, "OK")
+		c.String(http.StatusOK, "OK")
 	})
 
 	// Optionally print debug info
@@ -174,6 +193,7 @@ func main() {
 		})
 	}
 
+	//-----------------------------------
 	// If user provided client-id & secret, do ephemeral key approach
 	oidcEnabled := (cli.ClientID != "" && cli.ClientSecret != "")
 	var adminClient *tailscale.Client
@@ -250,6 +270,7 @@ func main() {
 		logger.Info("No client-id/secret provided; if Tailscale needs login, check logs for a URL.")
 	}
 
+	//-----------------------------------
 	// If we have adminClient + tailnetName, let's create an API key & start ACL sync
 	if adminClient != nil && cli.TailnetName != "" {
 		sync.Start(state, adminClient, cli.TailnetName, cli.SyncInterval)
@@ -272,22 +293,4 @@ func main() {
 	if err := r.RunListener(ln); err != nil {
 		logger.Fatal("Gin server failed on tsnet listener", zap.Error(err))
 	}
-}
-
-// apiKeyTransport is a simple RoundTripper that sets Authorization: Bearer <apiKey>
-// in each request.
-type apiKeyTransport struct {
-	base   http.RoundTripper
-	apiKey string
-}
-
-func (t *apiKeyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	clone := req.Clone(req.Context())
-	clone.Header.Set("Authorization", "Bearer "+t.apiKey)
-
-	rt := t.base
-	if rt == nil {
-		rt = http.DefaultTransport
-	}
-	return rt.RoundTrip(clone)
 }
