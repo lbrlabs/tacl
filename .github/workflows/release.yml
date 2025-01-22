@@ -1,0 +1,75 @@
+permissions:
+  contents: write
+
+name: release
+on:
+  push:
+    tags:
+    - v*.*.*
+    - '!v*.*.*-**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:    
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Unshallow clone
+        run: git fetch --prune --unshallow
+      - name: Install Go 1.21
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.23.x'
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v3
+        with:
+          args: release --clean
+          version: latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  docker:
+    runs-on: ubuntu-latest
+    needs: goreleaser 
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Unshallow clone
+        run: git fetch --prune --unshallow
+      - name: Install Go 1.19
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.23.x'
+      - name: Log in to the Container registry
+        id: login
+        uses: docker/login-action@v3.3.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set image metadata
+        id: metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.login.outputs.registry }}/${{ env.IMAGE_NAME}}
+          tags: |
+            type=raw,value=latest,enable=true
+            type=raw,value={{sha}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{raw}}
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v6.2.0
+        with:
+            context: .
+            push: true
+            tags: ${{ steps.metadata.outputs.tags }}
+            labels: ${{ steps.metadata.outputs.labels }}
