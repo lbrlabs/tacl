@@ -59,7 +59,7 @@ jobs:
         id: metadata
         uses: docker/metadata-action@v5
         with:
-          images: ${{ steps.login.outputs.registry }}/${{ env.IMAGE_NAME}}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME}}
           tags: |
             type=raw,value=latest,enable=true
             type=raw,value={{sha}}
