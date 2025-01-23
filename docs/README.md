@@ -204,7 +204,7 @@ You can specify the rest endpoints like `/acls` or `postures` to allow who's abl
 
 Tacl stores an intermediary state either in a local file or object store, which it syncs to Tailscale peridiocally. The state is not a valid Tailscale ACL, as Tacl adds some ID fields (which it strips out before syncing) to certain parts of the state in order to be able to effectively manage ACLs.
 
-See (state.md)
+See [State](state.md)
 
 
 
