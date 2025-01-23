@@ -1,14 +1,29 @@
 # Examples
 
-Below are **curl** examples (using `GET`, `POST`, and `PUT`) for each major endpoint group defined in your code. All examples assume your Tacl server is running on `http://tacl:8080`. Adjust host/port as needed.
+Below are **curl** examples (using `GET`, `POST`, `PUT`, and `DELETE`) for each major endpoint group defined in your code.  
+All examples assume your Tacl server is running on `http://tacl:8080`. Adjust host/port as needed.
 
-# 1. **ACLs** – `/acls`
+---
+
+## 1. **ACLs** – `/acls`
 
 ### List All ACLs
 ```bash
 curl -X GET http://tacl:8080/acls
 ```
-**Response**: Returns an array of ACL objects (each has an `id` plus the usual Tailscale `action`, `src`, `dst`, etc.).
+**Response**: Returns an array of ACL objects, each of which has:
+```json
+[
+  {
+    "id": "<UUID>",
+    "action": "...",
+    "src": [...],
+    "dst": [...],
+    ...
+  },
+  ...
+]
+```
 
 ### Get a Single ACL by ID
 ```bash
@@ -26,7 +41,7 @@ curl -X POST http://tacl:8080/acls \
     "dst": ["*:*"]
   }'
 ```
-**Response**: Returns the newly created ACL with a generated `id`.
+**Response**: Returns the newly created ACL, including a generated `id`.
 
 ### Update an Existing ACL (PUT)
 ```bash
@@ -43,21 +58,45 @@ curl -X PUT http://tacl:8080/acls \
 ```
 Replace `<ACL_ID>` with the UUID of the ACL you want to update.
 
+### Delete an ACL (DELETE)
+```bash
+curl -X DELETE http://tacl:8080/acls \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "<ACL_ID>"
+  }'
+```
+Replace `<ACL_ID>` with the UUID of the ACL you want to delete.
+
 ---
 
-# 2. **ACLTests** – `/acltests`
+## 2. **ACLTests** – `/acltests`
+
+ACLTests are now stored and looked up by a **stable UUID**, rather than array indices.
 
 ### List All ACLTests
 ```bash
 curl -X GET http://tacl:8080/acltests
 ```
-**Response**: Returns an array of Tailscale `ACLTest` objects.
-
-### Get One ACLTest by Index
-```bash
-curl -X GET http://tacl:8080/acltests/0
+**Response**: Returns an array of objects, each with:
+```json
+[
+  {
+    "id": "<UUID>",
+    "src": "...",
+    "dst": "...",
+    "allow": true/false
+  },
+  ...
+]
 ```
-Here `0` is the zero-based index in the array of ACLTests.
+*(These fields mirror Tailscale’s `ACLTest`, plus an `id`.)*
+
+### Get One ACLTest by ID
+```bash
+curl -X GET http://tacl:8080/acltests/<UUID>
+```
+Replace `<UUID>` with the test’s `id`.
 
 ### Create a New ACLTest (POST)
 ```bash
@@ -69,14 +108,14 @@ curl -X POST http://tacl:8080/acltests \
     "allow": true
   }'
 ```
-**Response**: Returns the newly created test object.
+**Response**: Returns the newly created test object, including a generated `id`.
 
 ### Update an Existing ACLTest (PUT)
 ```bash
 curl -X PUT http://tacl:8080/acltests \
   -H "Content-Type: application/json" \
   -d '{
-    "index": 0,
+    "id": "<UUID>",
     "test": {
       "src": "user@example.com",
       "dst": "tag:server:22",
@@ -84,18 +123,29 @@ curl -X PUT http://tacl:8080/acltests \
     }
   }'
 ```
-Replace `0` with the correct array index of the test you want to update.
+Replace `<UUID>` with the `id` of the test you want to update.
+
+### Delete an ACLTest (DELETE)
+```bash
+curl -X DELETE http://tacl:8080/acltests \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "<UUID>"
+  }'
+```
+Replace `<UUID>` with the `id` of the test you want to remove.
 
 ---
 
-# 3. **AutoApprovers** – `/autoapprovers`
+## 3. **AutoApprovers** – `/autoapprovers`
 
-These endpoints manage a single `ACLAutoApprovers` object (not an array).
+These endpoints manage a **single** `ACLAutoApprovers` object (not an array).
 
 ### Get AutoApprovers
 ```bash
 curl -X GET http://tacl:8080/autoapprovers
 ```
+**Response**: Returns the current `ACLAutoApprovers` object, or `404` if none.
 
 ### Create AutoApprovers (POST)
 ```bash
@@ -108,7 +158,7 @@ curl -X POST http://tacl:8080/autoapprovers \
     "exitNode": ["tag:router"]
   }'
 ```
-If an AutoApprovers object already exists, this endpoint may return a `409 Conflict`.
+**Note**: If an AutoApprovers object already exists, this endpoint may return `409 Conflict`.
 
 ### Update AutoApprovers (PUT)
 ```bash
@@ -121,18 +171,19 @@ curl -X PUT http://tacl:8080/autoapprovers \
     "exitNode": ["tag:router"]
   }'
 ```
-If there’s no existing object, this might return `404` (depending on your server logic).
+If there’s no existing object, this might return `404`.
 
 ---
 
-# 4. **DERPMap** – `/derpmap`
+## 4. **DERPMap** – `/derpmap`
 
-Manages a single `ACLDERPMap`.
+Manages a single `ACLDERPMap` object.
 
 ### Get the DERPMap
 ```bash
 curl -X GET http://tacl:8080/derpmap
 ```
+**Response**: The current DERPMap object, or `404` if none is set.
 
 ### Create a New DERPMap (POST)
 ```bash
@@ -175,13 +226,19 @@ curl -X PUT http://tacl:8080/derpmap \
 
 ---
 
-# 5. **Groups** – `/groups`
+## 5. **Groups** – `/groups`
 
 ### List All Groups
 ```bash
 curl -X GET http://tacl:8080/groups
 ```
-**Response**: Returns an array of `{ "name": "groupname", "members": [...] }`.
+**Response**: Returns an array of group objects:  
+```json
+[
+  { "name": "groupname", "members": ["alice@example.com", ...] },
+  ...
+]
+```
 
 ### Get a Group by Name
 ```bash
@@ -198,6 +255,7 @@ curl -X POST http://tacl:8080/groups \
     "members": ["alice@example.com", "bob@example.com"]
   }'
 ```
+**Response**: Returns the newly created group.
 
 ### Update an Existing Group (PUT)
 ```bash
@@ -208,21 +266,29 @@ curl -X PUT http://tacl:8080/groups \
     "members": ["alice@example.com", "charlie@example.com"]
   }'
 ```
+**Response**: Returns the updated group object.
 
 ---
 
-# 6. **Hosts** – `/hosts`
+## 6. **Hosts** – `/hosts`
 
 ### List All Hosts
 ```bash
 curl -X GET http://tacl:8080/hosts
 ```
-**Response**: Returns an array of `{ "name": "hostname", "ip": "10.0.0.1" }`.
+**Response**: Returns an array of host objects:
+```json
+[
+  { "name": "hostname", "ip": "10.0.0.1" },
+  ...
+]
+```
 
 ### Get a Host by Name
 ```bash
 curl -X GET http://tacl:8080/hosts/<HOST_NAME>
 ```
+Replace `<HOST_NAME>` with the host’s name.
 
 ### Create a New Host (POST)
 ```bash
@@ -246,13 +312,25 @@ curl -X PUT http://tacl:8080/hosts \
 
 ---
 
-# 7. **Node Attributes** – `/nodeattrs`
+## 7. **Node Attributes** – `/nodeattrs`
 
 ### List All Node Attribute Grants
 ```bash
 curl -X GET http://tacl:8080/nodeattrs
 ```
-**Response**: Array of `ExtendedNodeAttrGrant` objects (`id`, `target`, `attr`, `app`, etc.).
+**Response**: Returns an array of `ExtendedNodeAttrGrant` objects:
+```json
+[
+  {
+    "id": "<UUID>",
+    "target": [...],
+    "attr": [...],
+    "app": {...},
+    ...
+  },
+  ...
+]
+```
 
 ### Get a Single Node Attr by ID
 ```bash
@@ -269,7 +347,7 @@ curl -X POST http://tacl:8080/nodeattrs \
     "attr": ["test=example"]
   }'
 ```
-OR for an app-based node attribute:
+**Or** (for an app-based node attribute):
 ```bash
 curl -X POST http://tacl:8080/nodeattrs \
   -H "Content-Type: application/json" \
@@ -285,7 +363,7 @@ curl -X POST http://tacl:8080/nodeattrs \
     }
   }'
 ```
-**Note**: Exactly one of `attr` or `app` must be set.
+Exactly one of `attr` or `app` must be set.
 
 ### Update an Existing Node Attr (PUT)
 ```bash
@@ -301,13 +379,23 @@ curl -X PUT http://tacl:8080/nodeattrs \
 ```
 Replace `<UUID>` with the `id` of the node attribute to update.
 
+### Delete a Node Attr (DELETE)
+```bash
+curl -X DELETE http://tacl:8080/nodeattrs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "<UUID>"
+  }'
+```
+Replace `<UUID>` with the `id` of the node attribute to remove.
+
 ---
 
-# 8. **Postures** – `/postures`
+## 8. **Postures** – `/postures`
 
-## 8.1. Named Postures
+### 8.1. Named Postures
 
-### List All Postures
+#### List All Postures
 ```bash
 curl -X GET http://tacl:8080/postures
 ```
@@ -322,13 +410,13 @@ curl -X GET http://tacl:8080/postures
 }
 ```
 
-### Get a Single Named Posture
+#### Get a Single Named Posture
 ```bash
 curl -X GET http://tacl:8080/postures/<NAME>
 ```
-*(If `<NAME>` is `default`, see **8.2** below for handling default posture.)*
+*(If `<NAME>` is `default`, see **8.2** below.)*
 
-### Create a New Named Posture (POST)
+#### Create a New Named Posture (POST)
 ```bash
 curl -X POST http://tacl:8080/postures \
   -H "Content-Type: application/json" \
@@ -338,7 +426,7 @@ curl -X POST http://tacl:8080/postures \
   }'
 ```
 
-### Update a Named Posture (PUT)
+#### Update a Named Posture (PUT)
 ```bash
 curl -X PUT http://tacl:8080/postures \
   -H "Content-Type: application/json" \
@@ -348,14 +436,22 @@ curl -X PUT http://tacl:8080/postures \
   }'
 ```
 
-## 8.2. Default Posture – `/postures/default`
+### 8.2. Default Posture – `/postures/default`
 
-### Get Default Posture
+#### Get Default Posture
 ```bash
 curl -X GET http://tacl:8080/postures/default
 ```
+**Response**:  
+```json
+{
+  "defaultSourcePosture": [...],
+  "items": [...]
+}
+```
+(Or `404` if no default posture is set.)
 
-### Set/Update Default Posture (PUT)
+#### Set/Update Default Posture (PUT)
 ```bash
 curl -X PUT http://tacl:8080/postures/default \
   -H "Content-Type: application/json" \
@@ -369,13 +465,13 @@ curl -X PUT http://tacl:8080/postures/default \
 
 ---
 
-# 9. **Settings** – `/settings`
+## 9. **Settings** – `/settings`
 
 ### Get Current Settings
 ```bash
 curl -X GET http://tacl:8080/settings
 ```
-**Response**: Returns the JSON object (or empty if none).
+**Response**: Returns the JSON settings object, or `404` if none are set.
 
 ### Create New Settings (POST)
 ```bash
@@ -387,7 +483,7 @@ curl -X POST http://tacl:8080/settings \
     "randomizeClientPort": true
   }'
 ```
-If settings already exist, this might return `409 Conflict`.
+If settings already exist, may return `409 Conflict`.
 
 ### Update Existing Settings (PUT)
 ```bash
@@ -399,23 +495,39 @@ curl -X PUT http://tacl:8080/settings \
     "randomizeClientPort": false
   }'
 ```
-If none exist yet, this might return `404 Not Found`.
+If none exist yet, might return `404`.
 
 ---
 
-# 10. **SSH Rules** – `/ssh`
+## 10. **SSH Rules** – `/ssh`
+
+SSH rules are now managed by **UUID** IDs (similar to ACL entries).
 
 ### List All SSH Rules
 ```bash
 curl -X GET http://tacl:8080/ssh
 ```
-**Response**: Returns an array of SSH rules with `[{"id": "...", "action":"accept", ...}, ...]`.
-
-### Get SSH Rule by Index
-```bash
-curl -X GET http://tacl:8080/ssh/0
+**Response**: Returns an array of objects:
+```json
+[
+  {
+    "id": "<UUID>",
+    "action": "accept",
+    "src": [...],
+    "dst": [...],
+    "users": [...],
+    "checkPeriod": "...",
+    "acceptEnv": [...]
+  },
+  ...
+]
 ```
-Replace `0` with the zero-based index of the rule.
+
+### Get a Single SSH Rule by ID
+```bash
+curl -X GET http://tacl:8080/ssh/<UUID>
+```
+Replace `<UUID>` with the rule’s `id`.
 
 ### Create a New SSH Rule (POST)
 ```bash
@@ -440,13 +552,14 @@ curl -X POST http://tacl:8080/ssh \
     "users": ["root","devops"]
   }'
 ```
+**Response**: Returns the newly created rule, including its `id`.
 
-### Update an Existing SSH Rule by Index (PUT)
+### Update an Existing SSH Rule (PUT)
 ```bash
 curl -X PUT http://tacl:8080/ssh \
   -H "Content-Type: application/json" \
   -d '{
-    "index": 0,
+    "id": "<UUID>",
     "rule": {
       "action": "check",
       "checkPeriod": "24h",
@@ -457,21 +570,39 @@ curl -X PUT http://tacl:8080/ssh \
     }
   }'
 ```
+Replace `<UUID>` with the rule’s `id`.
+
+### Delete an SSH Rule (DELETE)
+```bash
+curl -X DELETE http://tacl:8080/ssh \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "<UUID>"
+  }'
+```
+Replace `<UUID>` with the rule’s `id`.
 
 ---
 
-# 11. **Tag Owners** – `/tagowners`
+## 11. **Tag Owners** – `/tagowners`
 
 ### List All Tag Owners
 ```bash
 curl -X GET http://tacl:8080/tagowners
 ```
-**Response**: Array of `{ "name": "webserver", "owners": ["autogroup:admin"] }`, etc.
+**Response**: Returns an array of tag-owner objects:
+```json
+[
+  { "name": "webserver", "owners": ["autogroup:admin"] },
+  ...
+]
+```
 
 ### Get a Single TagOwner by Name
 ```bash
 curl -X GET http://tacl:8080/tagowners/<NAME>
 ```
+Replace `<NAME>` with the tag name, e.g. `"webserver"`.
 
 ### Create a New TagOwner (POST)
 ```bash
@@ -482,6 +613,7 @@ curl -X POST http://tacl:8080/tagowners \
     "owners": ["autogroup:admin", "alice@example.com"]
   }'
 ```
+**Response**: Returns the created object.
 
 ### Update an Existing TagOwner (PUT)
 ```bash
@@ -492,3 +624,4 @@ curl -X PUT http://tacl:8080/tagowners \
     "owners": ["autogroup:admin", "bob@example.com"]
   }'
 ```
+Replace `"webserver"` with whatever tag name you’re updating.

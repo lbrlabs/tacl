@@ -3,7 +3,6 @@ package ssh
 import (
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -28,25 +27,27 @@ type ExtendedSSHEntry struct {
 }
 
 // RegisterRoutes wires up the SSH rules routes at /ssh.
+//
+//  GET     /ssh        => list all ExtendedSSHEntry
+//  GET     /ssh/:id    => get by ID
+//  POST    /ssh        => create (auto-generate ID)
+//  PUT     /ssh        => update by ID in JSON
+//  DELETE  /ssh        => delete by ID in JSON
 func RegisterRoutes(r *gin.Engine, state *common.State) {
 	s := r.Group("/ssh")
 	{
 		s.GET("", func(c *gin.Context) {
 			listSSH(c, state)
 		})
-		// GET /ssh/:index => get by numeric index
-		s.GET("/:index", func(c *gin.Context) {
-			getSSHByIndex(c, state)
+		s.GET("/:id", func(c *gin.Context) {
+			getSSHByID(c, state)
 		})
-		// POST /ssh => create (automatically generate ID)
 		s.POST("", func(c *gin.Context) {
 			createSSH(c, state)
 		})
-		// PUT /ssh => update by index in JSON
 		s.PUT("", func(c *gin.Context) {
 			updateSSH(c, state)
 		})
-		// DELETE /ssh => delete by index in JSON
 		s.DELETE("", func(c *gin.Context) {
 			deleteSSH(c, state)
 		})
@@ -64,15 +65,10 @@ func listSSH(c *gin.Context, state *common.State) {
 	c.JSON(http.StatusOK, entries)
 }
 
-// getSSHByIndex => GET /ssh/:index
-// fetches the ExtendedSSHEntry by array index
-func getSSHByIndex(c *gin.Context, state *common.State) {
-	indexStr := c.Param("index")
-	i, err := strconv.Atoi(indexStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid index"})
-		return
-	}
+// getSSHByID => GET /ssh/:id
+// fetches the ExtendedSSHEntry by UUID ID
+func getSSHByID(c *gin.Context, state *common.State) {
+	id := c.Param("id")
 
 	entries, err := getSSHFromState(state)
 	if err != nil {
@@ -80,11 +76,13 @@ func getSSHByIndex(c *gin.Context, state *common.State) {
 		return
 	}
 
-	if i < 0 || i >= len(entries) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "SSH rule index out of range"})
-		return
+	for _, entry := range entries {
+		if entry.ID == id {
+			c.JSON(http.StatusOK, entry)
+			return
+		}
 	}
-	c.JSON(http.StatusOK, entries[i])
+	c.JSON(http.StatusNotFound, gin.H{"error": "SSH rule not found with that ID"})
 }
 
 // createSSH => POST /ssh
@@ -102,7 +100,7 @@ func createSSH(c *gin.Context, state *common.State) {
 		return
 	}
 	if newRule.Action == "check" {
-		if _, err := time.ParseDuration(newRule.CheckPeriod); err != nil {
+		if _, err := time.ParseDuration(newRule.CheckPeriod); err != nil && newRule.CheckPeriod != "" {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid checkPeriod. Must be a valid duration (e.g. '12h', '30m')."})
 			return
 		}
@@ -129,19 +127,24 @@ func createSSH(c *gin.Context, state *common.State) {
 }
 
 // updateSSH => PUT /ssh
-// user must provide JSON with an "index" and the new rule data => { "index": 0, "rule": { ... } }
+// user must provide JSON like:
+//   {
+//     "id": "<uuid>",
+//     "rule": { ... }
+//   }
 func updateSSH(c *gin.Context, state *common.State) {
 	type updateRequest struct {
-		Index int    `json:"index"`
-		Rule  ACLSSH `json:"rule"`
+		ID   string `json:"id"`
+		Rule ACLSSH `json:"rule"`
 	}
+
 	var req updateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if req.Index < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or missing 'index' field"})
+	if req.ID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing 'id' field"})
 		return
 	}
 
@@ -166,30 +169,44 @@ func updateSSH(c *gin.Context, state *common.State) {
 		return
 	}
 
-	if req.Index >= len(entries) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "SSH rule index out of range"})
+	// Find the entry with the matching ID
+	var updated *ExtendedSSHEntry
+	for i := range entries {
+		if entries[i].ID == req.ID {
+			// Found => update the embedded ACLSSH fields
+			entries[i].ACLSSH = req.Rule
+			updated = &entries[i]
+			break
+		}
+	}
+	if updated == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "SSH rule not found with that ID"})
 		return
 	}
-
-	// Keep the existing ID the same, only update the embedded ACLSSH fields
-	entries[req.Index].ACLSSH = req.Rule
 
 	if err := state.UpdateKeyAndSave("sshRules", entries); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update SSH rule"})
 		return
 	}
-	c.JSON(http.StatusOK, entries[req.Index])
+	c.JSON(http.StatusOK, updated)
 }
 
 // deleteSSH => DELETE /ssh
-// user must provide JSON with "index" => { "index": 0 }
+// user must provide JSON like:
+//   {
+//     "id": "<uuid>"
+//   }
 func deleteSSH(c *gin.Context, state *common.State) {
 	type deleteRequest struct {
-		Index int `json:"index"`
+		ID string `json:"id"`
 	}
 	var req deleteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.ID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing 'id' field"})
 		return
 	}
 
@@ -199,13 +216,21 @@ func deleteSSH(c *gin.Context, state *common.State) {
 		return
 	}
 
-	if req.Index < 0 || req.Index >= len(entries) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "SSH rule index out of range"})
+	newList := make([]ExtendedSSHEntry, 0, len(entries))
+	deleted := false
+	for _, e := range entries {
+		if e.ID == req.ID {
+			deleted = true
+			continue
+		}
+		newList = append(newList, e)
+	}
+	if !deleted {
+		c.JSON(http.StatusNotFound, gin.H{"error": "SSH rule not found with that ID"})
 		return
 	}
 
-	entries = append(entries[:req.Index], entries[req.Index+1:]...)
-	if err := state.UpdateKeyAndSave("sshRules", entries); err != nil {
+	if err := state.UpdateKeyAndSave("sshRules", newList); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete SSH rule"})
 		return
 	}
