@@ -10,6 +10,9 @@
   <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.css">
   <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
   <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
+  <!-- Load docsify-plugin-flexible-alerts -->
+  <script src="https://unpkg.com/docsify-plugin-flexible-alerts"></script>
+
 
   <style>
     .alert-note {
@@ -29,10 +32,15 @@
       
       loadSidebar: true,
       name: 'Tacl',
-      repo: 'github.com/lbrlabs/tacl'
+      repo: 'github.com/lbrlabs/tacl',
+      'flexible-alerts': {
+        style: 'flat'
+      }
     }
   </script>
   <!-- Docsify v4 -->
   <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>
+  <script src="https://unpkg.com/docsify-plugin-flexible-alerts"></script>
+
 </body>
 </html>

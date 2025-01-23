@@ -2,8 +2,9 @@
 
 Tacl is an **experimental** tool that enables management of Tailscale ACLs via a CRUD based API, instead of a single flat file.
 
-> [!NOTE]
+> [!WARNING] 
 > Tacl is not production ready. Please don't use it to manage your production Tailscale ACL yet.
+
 
 It works by maintaining a state file, and then periodically syncing that file to the Tailscale API. You send requests to Tacl, and it appends JSON to a final JSON state, meaning you can add more granular components to a Tailscale ACL.
 
@@ -164,8 +165,7 @@ Now, if I check my Tacl logs:
 
 I've now managed my ACL without having to manually update the file, Tacl synced it to my Tailnet. I can of course also `DELETE` or `PUT` to an entry to update it.
 
-There are endpoints for almost all resources in Tailscale, so if you want to add a `tagOwner`, `autoApprover` or `grant` - you can do so!
-
+There are endpoints for almost all resources in Tailscale, so if you want to add a `tagOwner`, `autoApprover` or `grant` - you can do so! See [examples](examples.md) for more information!
 
 
 ## Authentication
