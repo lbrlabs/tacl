@@ -6,19 +6,30 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/lbrlabs/tacl/pkg/common"
-
-	// Import Tailscale's ACLAutoApprovers type:
 	tsclient "github.com/tailscale/tailscale-client-go/v2"
 )
 
+// ErrorResponse is used in @Failure annotations for descriptive error messages.
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+// ACLAutoApproversDoc duplicates fields from tsclient.ACLAutoApprovers
+// so we can reference it in Swagger without parse errors.
+//
+// routes:   map[string][]string
+// exitNode: []string
+type ACLAutoApproversDoc struct {
+	Routes   map[string][]string `json:"routes,omitempty"`
+	ExitNode []string            `json:"exitNode,omitempty"`
+}
+
 // RegisterRoutes wires up auto-approver routes under /autoapprovers.
 //
-// For example:
-//
-//	GET    /autoapprovers       => retrieve the entire ACLAutoApprovers struct
-//	POST   /autoapprovers       => create or set it (if none exists)
-//	PUT    /autoapprovers       => update it (if one exists)
-//	DELETE /autoapprovers       => remove it from the state
+//   GET    /autoapprovers => retrieve the entire ACLAutoApprovers struct
+//   POST   /autoapprovers => create or set it (if none exists)
+//   PUT    /autoapprovers => update it (if one exists)
+//   DELETE /autoapprovers => remove it from the state
 func RegisterRoutes(r *gin.Engine, state *common.State) {
 	a := r.Group("/autoapprovers")
 	{
@@ -38,104 +49,135 @@ func RegisterRoutes(r *gin.Engine, state *common.State) {
 }
 
 // getAutoApprovers => GET /autoapprovers
-// Returns the entire struct if present, otherwise an empty object or 404.
+// @Summary      Get auto-approvers
+// @Description  Returns the entire auto-approvers struct if present, otherwise returns an empty object or 404.
+// @Tags         AutoApprovers
+// @Accept       json
+// @Produce      json
+// @Success      200 {object} ACLAutoApproversDoc "Auto-approvers found (or empty)"
+// @Failure      500 {object} ErrorResponse       "Failed to parse autoApprovers"
+// @Router       /autoapprovers [get]
 func getAutoApprovers(c *gin.Context, state *common.State) {
 	aap, err := getAutoApproversFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse autoApprovers"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse autoApprovers"})
 		return
 	}
 	if aap == nil {
-		// If you prefer 404, do: c.JSON(http.StatusNotFound, ...)
-		c.JSON(http.StatusOK, tsclient.ACLAutoApprovers{
+		// Return an empty doc. If you prefer 404, do: c.JSON(http.StatusNotFound, ...)
+		c.JSON(http.StatusOK, ACLAutoApproversDoc{
 			Routes:   map[string][]string{},
 			ExitNode: []string{},
 		})
 		return
 	}
-	c.JSON(http.StatusOK, aap)
+	c.JSON(http.StatusOK, convertToDoc(*aap))
 }
 
 // createAutoApprovers => POST /autoapprovers
-// Creates a new ACLAutoApprovers if none exists
+// @Summary      Create auto-approvers
+// @Description  Creates a new ACLAutoApprovers if none exists. Returns 409 if one already exists.
+// @Tags         AutoApprovers
+// @Accept       json
+// @Produce      json
+// @Param        autoApprovers body ACLAutoApproversDoc true "AutoApprovers data"
+// @Success      201 {object} ACLAutoApproversDoc
+// @Failure      400 {object} ErrorResponse "Invalid JSON body"
+// @Failure      409 {object} ErrorResponse "autoApprovers already exists"
+// @Failure      500 {object} ErrorResponse "Failed to parse or save autoApprovers"
+// @Router       /autoapprovers [post]
 func createAutoApprovers(c *gin.Context, state *common.State) {
-	var newAAP tsclient.ACLAutoApprovers
-	if err := c.ShouldBindJSON(&newAAP); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	var newAAPDoc ACLAutoApproversDoc
+	if err := c.ShouldBindJSON(&newAAPDoc); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
 	existing, err := getAutoApproversFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to check existing autoApprovers"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to check existing autoApprovers"})
 		return
 	}
 
-	// We already have autoApprovers => "duplicate instance"
 	if existing != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "autoApprovers already exists"})
+		c.JSON(http.StatusConflict, ErrorResponse{Error: "autoApprovers already exists"})
 		return
 	}
 
-	// Overwrite or create:
+	newAAP := convertFromDoc(newAAPDoc)
 	if err := state.UpdateKeyAndSave("autoApprovers", newAAP); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save autoApprovers"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to save autoApprovers"})
 		return
 	}
-	c.JSON(http.StatusCreated, newAAP)
+	c.JSON(http.StatusCreated, newAAPDoc)
 }
 
 // updateAutoApprovers => PUT /autoapprovers
-// Updates an existing struct. If none exists, you might return 404 or create it.
+// @Summary      Update auto-approvers
+// @Description  Updates an existing auto-approvers struct. If none exists, returns 404.
+// @Tags         AutoApprovers
+// @Accept       json
+// @Produce      json
+// @Param        autoApprovers body ACLAutoApproversDoc true "Updated autoApprovers data"
+// @Success      200 {object} ACLAutoApproversDoc
+// @Failure      400 {object} ErrorResponse "Invalid JSON body"
+// @Failure      404 {object} ErrorResponse "No autoApprovers found to update"
+// @Failure      500 {object} ErrorResponse "Failed to update autoApprovers"
+// @Router       /autoapprovers [put]
 func updateAutoApprovers(c *gin.Context, state *common.State) {
-	var updated tsclient.ACLAutoApprovers
-	if err := c.ShouldBindJSON(&updated); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	var updatedDoc ACLAutoApproversDoc
+	if err := c.ShouldBindJSON(&updatedDoc); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
 	existing, err := getAutoApproversFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse autoApprovers"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse autoApprovers"})
 		return
 	}
 	if existing == nil {
-		// If you prefer to create if not existing, do that:
-		// or error out:
-		c.JSON(http.StatusNotFound, gin.H{"error": "No autoApprovers found to update"})
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "No autoApprovers found to update"})
 		return
 	}
 
-	// Overwrite the stored object
-	if err := state.UpdateKeyAndSave("autoApprovers", updated); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update autoApprovers"})
+	newAAP := convertFromDoc(updatedDoc)
+	if err := state.UpdateKeyAndSave("autoApprovers", newAAP); err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to update autoApprovers"})
 		return
 	}
-	c.JSON(http.StatusOK, updated)
+	c.JSON(http.StatusOK, updatedDoc)
 }
 
 // deleteAutoApprovers => DELETE /autoapprovers
-// Remove it from state. If none exists, return 404 or no-op.
+// @Summary      Delete auto-approvers
+// @Description  Removes the autoApprovers from state. If none exists, returns 404.
+// @Tags         AutoApprovers
+// @Accept       json
+// @Produce      json
+// @Success      200 {object} map[string]string "autoApprovers deleted"
+// @Failure      404 {object} ErrorResponse "No autoApprovers found"
+// @Failure      500 {object} ErrorResponse "Failed to delete autoApprovers"
+// @Router       /autoapprovers [delete]
 func deleteAutoApprovers(c *gin.Context, state *common.State) {
 	existing, err := getAutoApproversFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse autoApprovers"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse autoApprovers"})
 		return
 	}
 	if existing == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "No autoApprovers found"})
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "No autoApprovers found"})
 		return
 	}
 
-	// Remove the key entirely:
 	if err := state.UpdateKeyAndSave("autoApprovers", nil); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete autoApprovers"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to delete autoApprovers"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "autoApprovers deleted"})
 }
 
-// getAutoApproversFromState re-marshal state.Data["autoapprovers"] to *tsclient.ACLAutoApprovers
+// getAutoApproversFromState re-marshal state.Data["autoApprovers"] to *tsclient.ACLAutoApprovers
 func getAutoApproversFromState(state *common.State) (*tsclient.ACLAutoApprovers, error) {
 	raw := state.GetValue("autoApprovers")
 	if raw == nil {
@@ -150,4 +192,20 @@ func getAutoApproversFromState(state *common.State) (*tsclient.ACLAutoApprovers,
 		return nil, err
 	}
 	return &aap, nil
+}
+
+// convertToDoc transforms the real tsclient.ACLAutoApprovers into ACLAutoApproversDoc.
+func convertToDoc(aap tsclient.ACLAutoApprovers) ACLAutoApproversDoc {
+	return ACLAutoApproversDoc{
+		Routes:   aap.Routes,
+		ExitNode: aap.ExitNode,
+	}
+}
+
+// convertFromDoc transforms ACLAutoApproversDoc into the real tsclient.ACLAutoApprovers.
+func convertFromDoc(doc ACLAutoApproversDoc) tsclient.ACLAutoApprovers {
+	return tsclient.ACLAutoApprovers{
+		Routes:   doc.Routes,
+		ExitNode: doc.ExitNode,
+	}
 }

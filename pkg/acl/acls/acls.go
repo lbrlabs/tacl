@@ -8,24 +8,73 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/lbrlabs/tacl/pkg/common"
-	tsclient "github.com/tailscale/tailscale-client-go/v2"
 )
 
-// ExtendedACLEntry => local storage, stable ID + the usual ACL fields
+// ErrorResponse can be used in @Failure annotations so we get a more descriptive schema than map[string]string.
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+// ACL represents the fields of an ACL rule.
+// @Description ACL defines the action, source, destination, and optional posture for a single rule.
+type ACL struct {
+	// Action specifies the rule action (e.g. "accept" or "deny").
+	Action string `json:"action,omitempty" hujson:"Action,omitempty"`
+
+	// Source is a list of CIDRs or tags that match the traffic source.
+	Source []string `json:"src,omitempty" hujson:"Src,omitempty"`
+
+	// Destination is a list of CIDRs or tags that match the traffic destination.
+	Destination []string `json:"dst,omitempty" hujson:"Dst,omitempty"`
+
+	// Protocol (proto) can specify "tcp", "udp", etc.
+	Protocol string `json:"proto,omitempty" hujson:"Proto,omitempty"`
+
+	// SourcePosture is for an experimental feature and not yet public or documented as of 2023-08-17.
+	SourcePosture []string `json:"srcPosture,omitempty" hujson:"SrcPosture,omitempty"`
+}
+
+// ExtendedACLEntry is a local storage type with a stable UUID plus ACL fields.
+// @Description ExtendedACLEntry wraps an ACL with a unique ID for local storage.
 type ExtendedACLEntry struct {
 	ID string `json:"id"` // stable UUID
 
-	// Embed Tailscale's ACLEntry fields. That has "Action", "Src", "Dst", etc.
-	tsclient.ACLEntry
+	ACL
+}
+
+// updateRequest represents the body shape for PUT /acls.
+//
+// Example JSON:
+//
+//	{
+//	  "id": "some-uuid",
+//	  "entry": {
+//	    "action": "accept",
+//	    "src": ["10.0.0.0/24"],
+//	    "dst": ["10.0.1.0/24"]
+//	  }
+//	}
+type updateRequest struct {
+	ID    string `json:"id"`
+	Entry ACL    `json:"entry"`
+}
+
+// deleteRequest represents the body shape for DELETE /acls.
+//
+// Example JSON:
+//
+//	{ "id": "some-uuid" }
+type deleteRequest struct {
+	ID string `json:"id"`
 }
 
 // RegisterRoutes wires up ACL-related routes at /acls:
 //
-//	GET /acls           => list all (by ID)
-//	GET /acls/:id       => get one by ID
-//	POST /acls          => create (generate a new ID)
-//	PUT /acls           => update an existing ACL by ID in JSON
-//	DELETE /acls        => delete by ID in JSON
+//   GET    /acls         => list all (by ID)
+//   GET    /acls/:id     => get one by ID
+//   POST   /acls         => create (generate a new ID)
+//   PUT    /acls         => update an existing ACL by ID
+//   DELETE /acls         => delete by ID
 func RegisterRoutes(r *gin.Engine, state *common.State) {
 	a := r.Group("/acls")
 	{
@@ -52,22 +101,40 @@ func RegisterRoutes(r *gin.Engine, state *common.State) {
 }
 
 // listACLs => GET /acls => returns entire []ExtendedACLEntry
+// @Summary      List all ACL entries
+// @Description  Returns the entire list of ExtendedACLEntry objects.
+// @Tags         ACLs
+// @Accept       json
+// @Produce      json
+// @Success      200 {array}  ExtendedACLEntry "List of ACL entries"
+// @Failure      500 {object} ErrorResponse "Failed to parse ACLs"
+// @Router       /acls [get]
 func listACLs(c *gin.Context, state *common.State) {
 	acls, err := getACLsFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse ACLs"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse ACLs"})
 		return
 	}
 	c.JSON(http.StatusOK, acls)
 }
 
 // getACLByID => GET /acls/:id
+// @Summary      Get one ACL by ID
+// @Description  Retrieves a single ACL entry by its stable UUID.
+// @Tags         ACLs
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string  true  "ACL ID"
+// @Success      200  {object}  ExtendedACLEntry
+// @Failure      404  {object}  ErrorResponse "ACL entry not found"
+// @Failure      500  {object}  ErrorResponse "Failed to parse ACLs"
+// @Router       /acls/{id} [get]
 func getACLByID(c *gin.Context, state *common.State) {
 	id := c.Param("id")
 
 	acls, err := getACLsFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse ACLs"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse ACLs"})
 		return
 	}
 
@@ -77,107 +144,122 @@ func getACLByID(c *gin.Context, state *common.State) {
 			return
 		}
 	}
-	c.JSON(http.StatusNotFound, gin.H{"error": "ACL entry not found"})
+	c.JSON(http.StatusNotFound, ErrorResponse{Error: "ACL entry not found"})
 }
 
 // createACL => POST /acls
-// Body => Tailscale's ACLEntry fields (action, src, dst, etc). We'll embed them in ExtendedACLEntry w/ a new ID.
+// @Summary      Create a new ACL
+// @Description  Creates a new ACL by generating a new UUID and storing the provided ACL fields.
+// @Tags         ACLs
+// @Accept       json
+// @Produce      json
+// @Param        acl  body      ACL  true  "ACL fields"
+// @Success      201  {object}  ExtendedACLEntry
+// @Failure      400  {object}  ErrorResponse "Bad request"
+// @Failure      500  {object}  ErrorResponse "Failed to save new ACL entry"
+// @Router       /acls [post]
 func createACL(c *gin.Context, state *common.State) {
-	var newData tsclient.ACLEntry
+	var newData ACL
 	if err := c.ShouldBindJSON(&newData); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 
 	acls, err := getACLsFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse ACLs"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse ACLs"})
 		return
 	}
 
 	newEntry := ExtendedACLEntry{
-		ID:       uuid.NewString(),
-		ACLEntry: newData,
+		ID:  uuid.NewString(),
+		ACL: newData,
 	}
 
 	acls = append(acls, newEntry)
 	if err := state.UpdateKeyAndSave("acls", acls); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save new ACL entry"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to save new ACL entry"})
 		return
 	}
 	c.JSON(http.StatusCreated, newEntry)
 }
 
-// updateACL => PUT /acls => body shape:
-//
-//	{
-//	  "id": "...",
-//	  "entry": {
-//	    "action": "...",
-//	    "src": [...],
-//	    "dst": [...]
-//	  }
-//	}
+// updateACL => PUT /acls
+// @Summary      Update an existing ACL
+// @Description  Updates the ACL fields for an entry identified by its UUID.
+// @Tags         ACLs
+// @Accept       json
+// @Produce      json
+// @Param        body  body      updateRequest true "Update ACL request"
+// @Success      200   {object}  ExtendedACLEntry
+// @Failure      400   {object}  ErrorResponse "Missing or invalid request data"
+// @Failure      404   {object}  ErrorResponse "ACL entry not found"
+// @Failure      500   {object}  ErrorResponse "Failed to update ACL entry"
+// @Router       /acls [put]
 func updateACL(c *gin.Context, state *common.State) {
-	type updateRequest struct {
-		ID    string            `json:"id"`
-		Entry tsclient.ACLEntry `json:"entry"`
-	}
 	var req updateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 	if req.ID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing ACL 'id' in request body"})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Missing ACL 'id' in request body"})
 		return
 	}
 
 	acls, err := getACLsFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse ACLs"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse ACLs"})
 		return
 	}
 
 	var updated *ExtendedACLEntry
 	for i := range acls {
 		if acls[i].ID == req.ID {
-			// Found => update the embedded ACLEntry
-			acls[i].ACLEntry = req.Entry
+			// Found => update the embedded ACL
+			acls[i].ACL = req.Entry
 			updated = &acls[i]
 			break
 		}
 	}
 	if updated == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ACL entry not found"})
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "ACL entry not found"})
 		return
 	}
 
 	if err := state.UpdateKeyAndSave("acls", acls); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update ACL entry"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to update ACL entry"})
 		return
 	}
 	c.JSON(http.StatusOK, updated)
 }
 
 // deleteACL => DELETE /acls => body => { "id": "<uuid>" }
+// @Summary      Delete an ACL
+// @Description  Deletes an ACL entry by specifying its ID in the request body.
+// @Tags         ACLs
+// @Accept       json
+// @Produce      json
+// @Param        body  body      deleteRequest true "Delete ACL request"
+// @Success      200   {object}  map[string]string "ACL entry deleted"
+// @Failure      400   {object}  ErrorResponse "Missing or invalid ID"
+// @Failure      404   {object}  ErrorResponse "ACL entry not found with that ID"
+// @Failure      500   {object}  ErrorResponse "Failed to delete ACL entry"
+// @Router       /acls [delete]
 func deleteACL(c *gin.Context, state *common.State) {
-	type deleteRequest struct {
-		ID string `json:"id"`
-	}
 	var req deleteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 	if req.ID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing 'id' field"})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Missing 'id' field"})
 		return
 	}
 
 	acls, err := getACLsFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse ACLs"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse ACLs"})
 		return
 	}
 
@@ -185,19 +267,18 @@ func deleteACL(c *gin.Context, state *common.State) {
 	deleted := false
 	for _, entry := range acls {
 		if entry.ID == req.ID {
-			// skip it => effectively remove
 			deleted = true
-			continue
+			continue // skip => effectively remove
 		}
 		newList = append(newList, entry)
 	}
 	if !deleted {
-		c.JSON(http.StatusNotFound, gin.H{"error": "ACL entry not found with that ID"})
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "ACL entry not found with that ID"})
 		return
 	}
 
 	if err := state.UpdateKeyAndSave("acls", newList); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete ACL entry"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to delete ACL entry"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "ACL entry deleted"})

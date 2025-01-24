@@ -14,6 +14,10 @@ import (
 	ginzap "github.com/gin-contrib/zap"
 	"github.com/gin-gonic/gin"
 
+	_ "github.com/lbrlabs/tacl/swagger"
+    ginSwagger "github.com/swaggo/gin-swagger"
+    swaggerFiles "github.com/swaggo/files"
+
 
 	// Existing route packages
 	"github.com/lbrlabs/tacl/pkg/acl/acls"
@@ -80,6 +84,21 @@ type CLI struct {
 	Serve   ServeCmd   `cmd:"" help:"Start the TACL server."`
 	Version VersionCmd `cmd:"" help:"Print the version."`
 }
+
+// @title        TACL API
+// @version      0.1
+// @description  A Tailscale-based ACL management server.
+//
+// @contact.name  TACL Maintainers
+// @contact.url   https://github.com/lbrlabs/tacl
+// @contact.email maintainer@example.com
+//
+// @license.name  MIT
+// @license.url   https://opensource.org/licenses/MIT
+//
+// @BasePath  /
+//
+// main is the entrypoint for TACL
 
 // main parses flags and dispatches to either the init subcommand or the normal server flow.
 func main() {
@@ -271,6 +290,11 @@ func runMain(cli *CLI, serve *ServeCmd) {
 	nodeattrs.RegisterRoutes(r, state)
 	hosts.RegisterRoutes(r, state)
 	postures.RegisterRoutes(r, state)
+
+
+	// swagger endpoints
+	// Serve the Swagger UI at /swagger
+    r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Basic endpoints
 	r.GET("/state", func(c *gin.Context) {

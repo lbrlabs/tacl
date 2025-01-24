@@ -9,14 +9,36 @@ import (
 	"github.com/lbrlabs/tacl/pkg/common"
 )
 
-// TagOwner is the user-facing structure. We'll store it in a final map
-// at "tagOwners": { "tag:<Name>": [ ...owners... ] }.
+// ErrorResponse helps standardize error output in Swagger.
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+// TagOwner is the user-facing structure.
+//   "tagOwners": { "tag:<Name>": [ ...owners... ] }.
+//
+// @Description TagOwner associates a tag name (e.g. "webserver") with a list of owners.
 type TagOwner struct {
-	Name   string   `json:"name" binding:"required"`
+	// Name is the name of the tag (e.g. "webserver").
+	Name string `json:"name" binding:"required"`
+	// Owners is a list of owners for this tag.
 	Owners []string `json:"owners"`
 }
 
-// RegisterRoutes wires up /tagowners.
+// deleteTagOwnerRequest is the body shape for DELETE /tagowners.
+//
+// Example: { "name": "webserver" }
+type deleteTagOwnerRequest struct {
+	Name string `json:"name"`
+}
+
+// RegisterRoutes wires up /tagowners:
+//
+//   GET    /tagowners          => list all
+//   GET    /tagowners/:name    => get one by name
+//   POST   /tagowners          => create
+//   PUT    /tagowners          => update
+//   DELETE /tagowners          => delete
 func RegisterRoutes(r *gin.Engine, state *common.State) {
 	t := r.Group("/tagowners")
 	{
@@ -39,22 +61,40 @@ func RegisterRoutes(r *gin.Engine, state *common.State) {
 }
 
 // listTagOwners => GET /tagowners
+// @Summary      List all tag owners
+// @Description  Returns an array of TagOwner objects from state.
+// @Tags         TagOwners
+// @Accept       json
+// @Produce      json
+// @Success      200 {array}  TagOwner
+// @Failure      500 {object} ErrorResponse "Failed to parse tagOwners"
+// @Router       /tagowners [get]
 func listTagOwners(c *gin.Context, state *common.State) {
 	tagOwners, err := getTagOwnersFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse tagOwners"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse tagOwners"})
 		return
 	}
 	c.JSON(http.StatusOK, tagOwners)
 }
 
 // getTagOwnerByName => GET /tagowners/:name
+// @Summary      Get a tag owner by name
+// @Description  Retrieves the TagOwner with the given name.
+// @Tags         TagOwners
+// @Accept       json
+// @Produce      json
+// @Param        name path string true "Tag name"
+// @Success      200 {object} TagOwner
+// @Failure      404 {object} ErrorResponse "TagOwner not found"
+// @Failure      500 {object} ErrorResponse "Failed to parse tagOwners"
+// @Router       /tagowners/{name} [get]
 func getTagOwnerByName(c *gin.Context, state *common.State) {
 	name := c.Param("name")
 
 	tagOwners, err := getTagOwnersFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse tagOwners"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse tagOwners"})
 		return
 	}
 
@@ -64,60 +104,80 @@ func getTagOwnerByName(c *gin.Context, state *common.State) {
 			return
 		}
 	}
-	c.JSON(http.StatusNotFound, gin.H{"error": "TagOwner not found"})
+	c.JSON(http.StatusNotFound, ErrorResponse{Error: "TagOwner not found"})
 }
 
 // createTagOwner => POST /tagowners
-// Returns 409 Conflict if name already exists
+// @Summary      Create a new tag owner
+// @Description  Creates a TagOwner. Returns 409 if name already exists.
+// @Tags         TagOwners
+// @Accept       json
+// @Produce      json
+// @Param        tagOwner body TagOwner true "TagOwner to create"
+// @Success      201 {object} TagOwner
+// @Failure      400 {object} ErrorResponse "Bad request or missing name"
+// @Failure      409 {object} ErrorResponse "TagOwner already exists"
+// @Failure      500 {object} ErrorResponse "Failed to parse or save tagOwners"
+// @Router       /tagowners [post]
 func createTagOwner(c *gin.Context, state *common.State) {
 	var newTag TagOwner
 	if err := c.ShouldBindJSON(&newTag); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 	if newTag.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing 'name' field"})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Missing 'name' field"})
 		return
 	}
 
 	tagOwners, err := getTagOwnersFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse tagOwners"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse tagOwners"})
 		return
 	}
 
 	// Check for conflict
 	for _, t := range tagOwners {
 		if t.Name == newTag.Name {
-			c.JSON(http.StatusConflict, gin.H{"error": "TagOwner already exists"})
+			c.JSON(http.StatusConflict, ErrorResponse{Error: "TagOwner already exists"})
 			return
 		}
 	}
 
 	tagOwners = append(tagOwners, newTag)
 	if err := saveTagOwners(state, tagOwners); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save new TagOwner"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to save new TagOwner"})
 		return
 	}
 	c.JSON(http.StatusCreated, newTag)
 }
 
 // updateTagOwner => PUT /tagowners
-// Expects JSON: { "name": "...", "owners": [...] }
+// @Summary      Update a tag owner
+// @Description  Updates the TagOwner with a matching name. Expects JSON: { "name": "...", "owners": [...] }.
+// @Tags         TagOwners
+// @Accept       json
+// @Produce      json
+// @Param        tagOwner body TagOwner true "TagOwner to update"
+// @Success      200 {object} TagOwner
+// @Failure      400 {object} ErrorResponse "Bad request or missing name"
+// @Failure      404 {object} ErrorResponse "TagOwner not found"
+// @Failure      500 {object} ErrorResponse "Failed to parse or save changes"
+// @Router       /tagowners [put]
 func updateTagOwner(c *gin.Context, state *common.State) {
 	var updated TagOwner
 	if err := c.ShouldBindJSON(&updated); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 	if updated.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing 'name' field"})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Missing 'name' field"})
 		return
 	}
 
 	tagOwners, err := getTagOwnersFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse tagOwners"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse tagOwners"})
 		return
 	}
 
@@ -130,36 +190,43 @@ func updateTagOwner(c *gin.Context, state *common.State) {
 		}
 	}
 	if !found {
-		c.JSON(http.StatusNotFound, gin.H{"error": "TagOwner not found"})
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "TagOwner not found"})
 		return
 	}
 
 	if err := saveTagOwners(state, tagOwners); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update TagOwner"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to update TagOwner"})
 		return
 	}
 	c.JSON(http.StatusOK, updated)
 }
 
 // deleteTagOwner => DELETE /tagowners
-// Expects JSON: { "name": "webserver" }
+// @Summary      Delete a tag owner
+// @Description  Expects JSON: { "name": "webserver" } to remove the matching TagOwner.
+// @Tags         TagOwners
+// @Accept       json
+// @Produce      json
+// @Param        body body deleteTagOwnerRequest true "Delete TagOwner request"
+// @Success      200 {object} map[string]string "TagOwner deleted"
+// @Failure      400 {object} ErrorResponse      "Bad request or missing name"
+// @Failure      404 {object} ErrorResponse      "TagOwner not found"
+// @Failure      500 {object} ErrorResponse      "Failed to save changes"
+// @Router       /tagowners [delete]
 func deleteTagOwner(c *gin.Context, state *common.State) {
-	type request struct {
-		Name string `json:"name"`
-	}
-	var req request
+	var req deleteTagOwnerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
 	if req.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing 'name' field"})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Missing 'name' field"})
 		return
 	}
 
 	tagOwners, err := getTagOwnersFromState(state)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse tagOwners"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to parse tagOwners"})
 		return
 	}
 
@@ -172,19 +239,20 @@ func deleteTagOwner(c *gin.Context, state *common.State) {
 		}
 	}
 	if !found {
-		c.JSON(http.StatusNotFound, gin.H{"error": "TagOwner not found"})
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "TagOwner not found"})
 		return
 	}
 
 	if err := saveTagOwners(state, tagOwners); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save changes"})
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to save changes"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "TagOwner deleted"})
 }
 
 // -----------------------------------------------------------------------------
-// Conversions between []TagOwner (API) and map[string][]string (actual storage).
+// Conversions between []TagOwner (API) and map[string][]string (actual storage):
+//   "tagOwners": { "tag:<Name>": [ ...owners... ] }.
 // -----------------------------------------------------------------------------
 
 func getTagOwnersFromState(state *common.State) ([]TagOwner, error) {
@@ -196,7 +264,7 @@ func getTagOwnersFromState(state *common.State) ([]TagOwner, error) {
 	if err != nil {
 		return nil, err
 	}
-	// final stored data is map["tag:<name>"] => []string
+	// final stored data: map["tag:<name>"] => []string
 	var rawMap map[string][]string
 	if err := json.Unmarshal(b, &rawMap); err != nil {
 		return nil, err

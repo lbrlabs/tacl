@@ -11,6 +11,71 @@ import (
 	tsclient "github.com/tailscale/tailscale-client-go/v2"
 )
 
+// -----------------------------------------------------------------------------
+// 1) Doc-Only Types for Swag
+// -----------------------------------------------------------------------------
+
+// ErrorResponse is used for error responses in @Failure annotations.
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+// AppConnectorInputDoc duplicates AppConnectorInput for Swag docs.
+// It's used under "app" in NodeAttrGrantInputDoc or ExtendedNodeAttrGrantDoc.
+type AppConnectorInputDoc struct {
+	Name       string   `json:"name,omitempty"`
+	Connectors []string `json:"connectors,omitempty"`
+	Domains    []string `json:"domains,omitempty"`
+}
+
+// NodeAttrGrantInputDoc duplicates NodeAttrGrantInput for doc.
+// "Either `attr` or `app` must be set, but not both."
+type NodeAttrGrantInputDoc struct {
+	// Target is a list of node targets (could be ["*"] if using app).
+	Target []string `json:"target" binding:"required"`
+	// Attr is a list of attribute strings if not using "app".
+	Attr []string `json:"attr,omitempty"`
+	// App is a map of <string> to []AppConnectorInputDoc if not using "attr".
+	App map[string][]AppConnectorInputDoc `json:"app,omitempty"`
+}
+
+// ExtendedNodeAttrGrantDoc is the doc version of ExtendedNodeAttrGrant,
+// including a stable "id" and the fields from NodeAttrGrant plus "app".
+type ExtendedNodeAttrGrantDoc struct {
+	// ID is the local stable UUID.
+	ID string `json:"id"`
+	// Target is the list of node targets for the attribute grant.
+	Target []string `json:"target"`
+	// Attr is the list of attributes if this is an attr-based grant.
+	Attr []string `json:"attr,omitempty"`
+	// App is present if this is an app-based grant.
+	App map[string][]AppConnectorInputDoc `json:"app,omitempty"`
+}
+
+// updateNodeAttrRequestDoc duplicates the PUT request body:
+//
+//	{
+//	  "id": "<uuid>",
+//	  "grant": { "target": [...], "attr": [...], "app": {...} }
+//	}
+type updateNodeAttrRequestDoc struct {
+	ID    string               `json:"id"`
+	Grant NodeAttrGrantInputDoc `json:"grant"`
+}
+
+// deleteNodeAttrRequestDoc is the shape for DELETE /nodeattrs.
+//
+//	{
+//	  "id": "<uuid>"
+//	}
+type deleteNodeAttrRequestDoc struct {
+	ID string `json:"id"`
+}
+
+// -----------------------------------------------------------------------------
+// 2) Actual Runtime Types (unchanged) + Route Registration
+// -----------------------------------------------------------------------------
+
 // NodeAttrGrantInput => incoming JSON for create/update
 // Exactly one of Attr or App must be set
 type NodeAttrGrantInput struct {
@@ -35,6 +100,12 @@ type ExtendedNodeAttrGrant struct {
 }
 
 // RegisterRoutes => sets up /nodeattrs endpoints
+//
+//   GET    /nodeattrs        => list all ExtendedNodeAttrGrant
+//   GET    /nodeattrs/:id    => get one by ID
+//   POST   /nodeattrs        => create new nodeattr
+//   PUT    /nodeattrs        => update existing by ID
+//   DELETE /nodeattrs        => delete by ID
 func RegisterRoutes(r *gin.Engine, state *common.State) {
 	n := r.Group("/nodeattrs")
 	{
@@ -50,28 +121,56 @@ func RegisterRoutes(r *gin.Engine, state *common.State) {
 		n.POST("", func(c *gin.Context) {
 			createNodeAttr(c, state)
 		})
-		// Update by sending { "id": "<uuid>", "grant": { ... } }
+		// Update
 		n.PUT("", func(c *gin.Context) {
 			updateNodeAttr(c, state)
 		})
-		// Delete by sending { "id": "<uuid>" }
+		// Delete
 		n.DELETE("", func(c *gin.Context) {
 			deleteNodeAttr(c, state)
 		})
 	}
 }
 
+// -----------------------------------------------------------------------------
+// 3) Endpoints (Swag Annotations referencing doc-only structs)
+// -----------------------------------------------------------------------------
+
 // listNodeAttrs => GET /nodeattrs => returns all ExtendedNodeAttrGrant
+// @Summary      List all node attribute grants
+// @Description  Returns the entire list of ExtendedNodeAttrGrant objects from state.
+// @Tags         NodeAttrs
+// @Accept       json
+// @Produce      json
+// @Success      200 {array}  ExtendedNodeAttrGrantDoc
+// @Failure      500 {object} ErrorResponse "Failed to parse node attributes"
+// @Router       /nodeattrs [get]
 func listNodeAttrs(c *gin.Context, state *common.State) {
 	grants, err := getNodeAttrsFromState(state)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse node attributes"})
 		return
 	}
-	c.JSON(http.StatusOK, grants)
+
+	// Convert actual ExtendedNodeAttrGrant to doc structs
+	docs := make([]ExtendedNodeAttrGrantDoc, 0, len(grants))
+	for _, realGrant := range grants {
+		docs = append(docs, convertRealGrantToDoc(realGrant))
+	}
+	c.JSON(http.StatusOK, docs)
 }
 
 // getNodeAttrByID => GET /nodeattrs/:id
+// @Summary      Get node attribute grant by ID
+// @Description  Retrieves a single ExtendedNodeAttrGrant by its stable UUID.
+// @Tags         NodeAttrs
+// @Accept       json
+// @Produce      json
+// @Param        id  path string true "NodeAttrGrant ID"
+// @Success      200 {object} ExtendedNodeAttrGrantDoc
+// @Failure      404 {object} ErrorResponse "No nodeattr found with that id"
+// @Failure      500 {object} ErrorResponse "Failed to parse node attributes"
+// @Router       /nodeattrs/{id} [get]
 func getNodeAttrByID(c *gin.Context, state *common.State) {
 	id := c.Param("id")
 
@@ -83,14 +182,24 @@ func getNodeAttrByID(c *gin.Context, state *common.State) {
 
 	for _, g := range grants {
 		if g.ID == id {
-			c.JSON(http.StatusOK, g)
+			c.JSON(http.StatusOK, convertRealGrantToDoc(g))
 			return
 		}
 	}
 	c.JSON(http.StatusNotFound, gin.H{"error": "No nodeattr found with that id"})
 }
 
-// createNodeAttr => POST /nodeattrs (body => NodeAttrGrantInput)
+// createNodeAttr => POST /nodeattrs
+// @Summary      Create a new node attribute grant
+// @Description  Creates a new ExtendedNodeAttrGrant with either `attr` or `app`. If `app` is set, `target` is forced to ["*"].
+// @Tags         NodeAttrs
+// @Accept       json
+// @Produce      json
+// @Param        grant body NodeAttrGrantInputDoc true "NodeAttrGrant input"
+// @Success      201 {object} ExtendedNodeAttrGrantDoc
+// @Failure      400 {object} ErrorResponse "Either 'attr' or 'app' must be set, but not both"
+// @Failure      500 {object} ErrorResponse "Failed to parse node attributes or save new grant"
+// @Router       /nodeattrs [post]
 func createNodeAttr(c *gin.Context, state *common.State) {
 	var input NodeAttrGrantInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -129,15 +238,21 @@ func createNodeAttr(c *gin.Context, state *common.State) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save node attribute"})
 		return
 	}
-	c.JSON(http.StatusCreated, newGrant)
+	c.JSON(http.StatusCreated, convertRealGrantToDoc(newGrant))
 }
 
-// updateNodeAttr => PUT /nodeattrs => body shape:
-//
-//	{
-//	  "id": "<uuid>",
-//	  "grant": { "target": [...], "attr": [...], "app": {...} }
-//	}
+// updateNodeAttr => PUT /nodeattrs
+// @Summary      Update an existing node attribute grant
+// @Description  Updates a grant by ID. If `app` is set, `target` is forced to ["*"].
+// @Tags         NodeAttrs
+// @Accept       json
+// @Produce      json
+// @Param        body body updateNodeAttrRequestDoc true "Update NodeAttr request"
+// @Success      200 {object} ExtendedNodeAttrGrantDoc
+// @Failure      400 {object} ErrorResponse "Invalid JSON or missing fields"
+// @Failure      404 {object} ErrorResponse "NodeAttr not found"
+// @Failure      500 {object} ErrorResponse "Failed to parse or update node attribute"
+// @Router       /nodeattrs [put]
 func updateNodeAttr(c *gin.Context, state *common.State) {
 	type updateRequest struct {
 		ID    string             `json:"id"`
@@ -188,10 +303,21 @@ func updateNodeAttr(c *gin.Context, state *common.State) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update node attribute"})
 		return
 	}
-	c.JSON(http.StatusOK, updated)
+	c.JSON(http.StatusOK, convertRealGrantToDoc(*updated))
 }
 
-// deleteNodeAttr => DELETE /nodeattrs => { "id": "<uuid>" }
+// deleteNodeAttr => DELETE /nodeattrs
+// @Summary      Delete a node attribute grant
+// @Description  Deletes by specifying its ID in the request body.
+// @Tags         NodeAttrs
+// @Accept       json
+// @Produce      json
+// @Param        body body deleteNodeAttrRequestDoc true "Delete NodeAttr request"
+// @Success      200 {object} map[string]string "Node attribute deleted"
+// @Failure      400 {object} ErrorResponse "Missing or invalid ID"
+// @Failure      404 {object} ErrorResponse "NodeAttr not found with that id"
+// @Failure      500 {object} ErrorResponse "Failed to delete node attribute"
+// @Router       /nodeattrs [delete]
 func deleteNodeAttr(c *gin.Context, state *common.State) {
 	type deleteRequest struct {
 		ID string `json:"id"`
@@ -216,7 +342,6 @@ func deleteNodeAttr(c *gin.Context, state *common.State) {
 	deleted := false
 	for _, g := range grants {
 		if g.ID == req.ID {
-			// skip it
 			deleted = true
 			continue
 		}
@@ -235,7 +360,7 @@ func deleteNodeAttr(c *gin.Context, state *common.State) {
 }
 
 // -----------------------------------------------------------------------------
-// Helpers
+// 4) Helper / Conversion Functions
 // -----------------------------------------------------------------------------
 
 func getNodeAttrsFromState(state *common.State) ([]ExtendedNodeAttrGrant, error) {
@@ -267,6 +392,31 @@ func convertAppConnectors(in map[string][]AppConnectorInput) map[string][]AppCon
 	return out
 }
 
+// convertRealGrantToDoc transforms a runtime ExtendedNodeAttrGrant to the doc version ExtendedNodeAttrGrantDoc.
+func convertRealGrantToDoc(real ExtendedNodeAttrGrant) ExtendedNodeAttrGrantDoc {
+	// Convert each app connector to doc form
+	docApp := make(map[string][]AppConnectorInputDoc, len(real.App))
+	for key, arr := range real.App {
+		docs := make([]AppConnectorInputDoc, len(arr))
+		for i, item := range arr {
+			docs[i] = AppConnectorInputDoc{
+				Name:       item.Name,
+				Connectors: item.Connectors,
+				Domains:    item.Domains,
+			}
+		}
+		docApp[key] = docs
+	}
+
+	return ExtendedNodeAttrGrantDoc{
+		ID:     real.ID,
+		Target: real.Target,
+		Attr:   real.Attr,
+		App:    docApp,
+	}
+}
+
+// exactlyOneOfAttrOrApp checks that NodeAttrGrantInput has either .Attr or .App, but not both.
 func exactlyOneOfAttrOrApp(input NodeAttrGrantInput) bool {
 	hasAttr := len(input.Attr) > 0
 	hasApp := len(input.App) > 0

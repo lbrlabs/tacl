@@ -1,0 +1,1288 @@
+basePath: /
+definitions:
+  acls.ACL:
+    description: ACL defines the action, source, destination, and optional posture
+      for a single rule.
+    properties:
+      action:
+        description: Action specifies the rule action (e.g. "accept" or "deny").
+        type: string
+      dst:
+        description: Destination is a list of CIDRs or tags that match the traffic
+          destination.
+        items:
+          type: string
+        type: array
+      proto:
+        description: Protocol (proto) can specify "tcp", "udp", etc.
+        type: string
+      src:
+        description: Source is a list of CIDRs or tags that match the traffic source.
+        items:
+          type: string
+        type: array
+      srcPosture:
+        description: SourcePosture is for an experimental feature and not yet public
+          or documented as of 2023-08-17.
+        items:
+          type: string
+        type: array
+    type: object
+  acls.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  acls.ExtendedACLEntry:
+    description: ExtendedACLEntry wraps an ACL with a unique ID for local storage.
+    properties:
+      action:
+        description: Action specifies the rule action (e.g. "accept" or "deny").
+        type: string
+      dst:
+        description: Destination is a list of CIDRs or tags that match the traffic
+          destination.
+        items:
+          type: string
+        type: array
+      id:
+        description: stable UUID
+        type: string
+      proto:
+        description: Protocol (proto) can specify "tcp", "udp", etc.
+        type: string
+      src:
+        description: Source is a list of CIDRs or tags that match the traffic source.
+        items:
+          type: string
+        type: array
+      srcPosture:
+        description: SourcePosture is for an experimental feature and not yet public
+          or documented as of 2023-08-17.
+        items:
+          type: string
+        type: array
+    type: object
+  acls.deleteRequest:
+    properties:
+      id:
+        type: string
+    type: object
+  acls.updateRequest:
+    properties:
+      entry:
+        $ref: '#/definitions/acls.ACL'
+      id:
+        type: string
+    type: object
+  acltests.ACLTest:
+    description: ACLTest holds test scenarios like "deny" rules, "accept" rules, protocol,
+      etc.
+    properties:
+      accept:
+        description: Accept is a list of rules or addresses to be accepted.
+        items:
+          type: string
+        type: array
+      deny:
+        description: Deny is a list of rules or addresses to be denied.
+        items:
+          type: string
+        type: array
+      proto:
+        description: Proto indicates the protocol (tcp, udp, etc.).
+        type: string
+      src:
+        description: Source is a string describing the traffic source (e.g., IP or
+          user).
+        type: string
+    type: object
+  acltests.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  acltests.ExtendedACLTest:
+    description: ExtendedACLTest includes the test data plus an auto-generated ID.
+    properties:
+      accept:
+        description: Accept is a list of rules or addresses to be accepted.
+        items:
+          type: string
+        type: array
+      deny:
+        description: Deny is a list of rules or addresses to be denied.
+        items:
+          type: string
+        type: array
+      id:
+        type: string
+      proto:
+        description: Proto indicates the protocol (tcp, udp, etc.).
+        type: string
+      src:
+        description: Source is a string describing the traffic source (e.g., IP or
+          user).
+        type: string
+    type: object
+  acltests.deleteTestRequest:
+    properties:
+      id:
+        type: string
+    type: object
+  acltests.updateTestRequest:
+    properties:
+      id:
+        type: string
+      test:
+        $ref: '#/definitions/acltests.ACLTest'
+    type: object
+  autoapprovers.ACLAutoApproversDoc:
+    properties:
+      exitNode:
+        items:
+          type: string
+        type: array
+      routes:
+        additionalProperties:
+          items:
+            type: string
+          type: array
+        type: object
+    type: object
+  autoapprovers.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  derpmap.ACLDERPMapDoc:
+    properties:
+      regions:
+        additionalProperties:
+          $ref: '#/definitions/derpmap.ACLDERPRegionDoc'
+        type: object
+    type: object
+  derpmap.ACLDERPRegionDoc:
+    properties:
+      regionCode:
+        type: string
+      regionID:
+        type: integer
+    type: object
+  derpmap.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  groups.DeleteGroupRequest:
+    properties:
+      name:
+        type: string
+    type: object
+  groups.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  groups.Group:
+    description: A Group has a required Name and a list of Members.
+    properties:
+      members:
+        description: Members is the list of user identifiers or tags belonging to
+          this group.
+        items:
+          type: string
+        type: array
+      name:
+        description: Name is the unique name of the group (e.g., "engineering").
+        type: string
+    required:
+    - name
+    type: object
+  hosts.DeleteHostRequest:
+    properties:
+      name:
+        type: string
+    type: object
+  hosts.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  hosts.Host:
+    description: Host has a required name (hostname) and IP.
+    properties:
+      ip:
+        description: IP is the IP or CIDR address associated with this hostname.
+        type: string
+      name:
+        description: Name is the hostname identifier.
+        type: string
+    required:
+    - ip
+    - name
+    type: object
+  nodeattrs.AppConnectorInputDoc:
+    properties:
+      connectors:
+        items:
+          type: string
+        type: array
+      domains:
+        items:
+          type: string
+        type: array
+      name:
+        type: string
+    type: object
+  nodeattrs.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  nodeattrs.ExtendedNodeAttrGrantDoc:
+    properties:
+      app:
+        additionalProperties:
+          items:
+            $ref: '#/definitions/nodeattrs.AppConnectorInputDoc'
+          type: array
+        description: App is present if this is an app-based grant.
+        type: object
+      attr:
+        description: Attr is the list of attributes if this is an attr-based grant.
+        items:
+          type: string
+        type: array
+      id:
+        description: ID is the local stable UUID.
+        type: string
+      target:
+        description: Target is the list of node targets for the attribute grant.
+        items:
+          type: string
+        type: array
+    type: object
+  nodeattrs.NodeAttrGrantInputDoc:
+    properties:
+      app:
+        additionalProperties:
+          items:
+            $ref: '#/definitions/nodeattrs.AppConnectorInputDoc'
+          type: array
+        description: App is a map of <string> to []AppConnectorInputDoc if not using
+          "attr".
+        type: object
+      attr:
+        description: Attr is a list of attribute strings if not using "app".
+        items:
+          type: string
+        type: array
+      target:
+        description: Target is a list of node targets (could be ["*"] if using app).
+        items:
+          type: string
+        type: array
+    required:
+    - target
+    type: object
+  nodeattrs.deleteNodeAttrRequestDoc:
+    properties:
+      id:
+        type: string
+    type: object
+  nodeattrs.updateNodeAttrRequestDoc:
+    properties:
+      grant:
+        $ref: '#/definitions/nodeattrs.NodeAttrGrantInputDoc'
+      id:
+        type: string
+    type: object
+info:
+  contact:
+    email: maintainer@example.com
+    name: TACL Maintainers
+    url: https://github.com/lbrlabs/tacl
+  description: A Tailscale-based ACL management server.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  title: TACL API
+  version: "0.1"
+paths:
+  /acls:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes an ACL entry by specifying its ID in the request body.
+      parameters:
+      - description: Delete ACL request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/acls.deleteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ACL entry deleted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Missing or invalid ID
+          schema:
+            $ref: '#/definitions/acls.ErrorResponse'
+        "404":
+          description: ACL entry not found with that ID
+          schema:
+            $ref: '#/definitions/acls.ErrorResponse'
+        "500":
+          description: Failed to delete ACL entry
+          schema:
+            $ref: '#/definitions/acls.ErrorResponse'
+      summary: Delete an ACL
+      tags:
+      - ACLs
+    get:
+      consumes:
+      - application/json
+      description: Returns the entire list of ExtendedACLEntry objects.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of ACL entries
+          schema:
+            items:
+              $ref: '#/definitions/acls.ExtendedACLEntry'
+            type: array
+        "500":
+          description: Failed to parse ACLs
+          schema:
+            $ref: '#/definitions/acls.ErrorResponse'
+      summary: List all ACL entries
+      tags:
+      - ACLs
+    post:
+      consumes:
+      - application/json
+      description: Creates a new ACL by generating a new UUID and storing the provided
+        ACL fields.
+      parameters:
+      - description: ACL fields
+        in: body
+        name: acl
+        required: true
+        schema:
+          $ref: '#/definitions/acls.ACL'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/acls.ExtendedACLEntry'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/acls.ErrorResponse'
+        "500":
+          description: Failed to save new ACL entry
+          schema:
+            $ref: '#/definitions/acls.ErrorResponse'
+      summary: Create a new ACL
+      tags:
+      - ACLs
+    put:
+      consumes:
+      - application/json
+      description: Updates the ACL fields for an entry identified by its UUID.
+      parameters:
+      - description: Update ACL request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/acls.updateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/acls.ExtendedACLEntry'
+        "400":
+          description: Missing or invalid request data
+          schema:
+            $ref: '#/definitions/acls.ErrorResponse'
+        "404":
+          description: ACL entry not found
+          schema:
+            $ref: '#/definitions/acls.ErrorResponse'
+        "500":
+          description: Failed to update ACL entry
+          schema:
+            $ref: '#/definitions/acls.ErrorResponse'
+      summary: Update an existing ACL
+      tags:
+      - ACLs
+  /acls/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a single ACL entry by its stable UUID.
+      parameters:
+      - description: ACL ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/acls.ExtendedACLEntry'
+        "404":
+          description: ACL entry not found
+          schema:
+            $ref: '#/definitions/acls.ErrorResponse'
+        "500":
+          description: Failed to parse ACLs
+          schema:
+            $ref: '#/definitions/acls.ErrorResponse'
+      summary: Get one ACL by ID
+      tags:
+      - ACLs
+  /acltests:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes an ACLTest by specifying its ID in the request body.
+      parameters:
+      - description: Delete ACLTest request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/acltests.deleteTestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ACLTest deleted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Missing or invalid ID
+          schema:
+            $ref: '#/definitions/acltests.ErrorResponse'
+        "404":
+          description: ACLTest not found with that ID
+          schema:
+            $ref: '#/definitions/acltests.ErrorResponse'
+        "500":
+          description: Failed to delete ACLTest
+          schema:
+            $ref: '#/definitions/acltests.ErrorResponse'
+      summary: Delete an ACL test
+      tags:
+      - ACLTests
+    get:
+      consumes:
+      - application/json
+      description: Returns all ExtendedACLTest items from storage.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of ACL test items
+          schema:
+            items:
+              $ref: '#/definitions/acltests.ExtendedACLTest'
+            type: array
+        "500":
+          description: Failed to parse ACLTests
+          schema:
+            $ref: '#/definitions/acltests.ErrorResponse'
+      summary: List all ACL tests
+      tags:
+      - ACLTests
+    post:
+      consumes:
+      - application/json
+      description: Creates a new test item with a generated UUID, storing the provided
+        ACLTest fields.
+      parameters:
+      - description: ACLTest fields
+        in: body
+        name: test
+        required: true
+        schema:
+          $ref: '#/definitions/acltests.ACLTest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/acltests.ExtendedACLTest'
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/acltests.ErrorResponse'
+        "500":
+          description: Failed to parse or save ACLTests
+          schema:
+            $ref: '#/definitions/acltests.ErrorResponse'
+      summary: Create a new ACL test
+      tags:
+      - ACLTests
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing ACL test by ID with new ACLTest fields.
+      parameters:
+      - description: Update ACLTest request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/acltests.updateTestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/acltests.ExtendedACLTest'
+        "400":
+          description: Missing or invalid request data
+          schema:
+            $ref: '#/definitions/acltests.ErrorResponse'
+        "404":
+          description: ACLTest not found with that ID
+          schema:
+            $ref: '#/definitions/acltests.ErrorResponse'
+        "500":
+          description: Failed to update ACLTest
+          schema:
+            $ref: '#/definitions/acltests.ErrorResponse'
+      summary: Update an ACL test
+      tags:
+      - ACLTests
+  /acltests/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves an ACL test item by its stable UUID.
+      parameters:
+      - description: ACLTest ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/acltests.ExtendedACLTest'
+        "404":
+          description: ACLTest not found with that ID
+          schema:
+            $ref: '#/definitions/acltests.ErrorResponse'
+        "500":
+          description: Failed to parse ACLTests
+          schema:
+            $ref: '#/definitions/acltests.ErrorResponse'
+      summary: Get one ACL test by ID
+      tags:
+      - ACLTests
+  /autoapprovers:
+    delete:
+      consumes:
+      - application/json
+      description: Removes the autoApprovers from state. If none exists, returns 404.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: autoApprovers deleted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: No autoApprovers found
+          schema:
+            $ref: '#/definitions/autoapprovers.ErrorResponse'
+        "500":
+          description: Failed to delete autoApprovers
+          schema:
+            $ref: '#/definitions/autoapprovers.ErrorResponse'
+      summary: Delete auto-approvers
+      tags:
+      - AutoApprovers
+    get:
+      consumes:
+      - application/json
+      description: Returns the entire auto-approvers struct if present, otherwise
+        returns an empty object or 404.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Auto-approvers found (or empty)
+          schema:
+            $ref: '#/definitions/autoapprovers.ACLAutoApproversDoc'
+        "500":
+          description: Failed to parse autoApprovers
+          schema:
+            $ref: '#/definitions/autoapprovers.ErrorResponse'
+      summary: Get auto-approvers
+      tags:
+      - AutoApprovers
+    post:
+      consumes:
+      - application/json
+      description: Creates a new ACLAutoApprovers if none exists. Returns 409 if one
+        already exists.
+      parameters:
+      - description: AutoApprovers data
+        in: body
+        name: autoApprovers
+        required: true
+        schema:
+          $ref: '#/definitions/autoapprovers.ACLAutoApproversDoc'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/autoapprovers.ACLAutoApproversDoc'
+        "400":
+          description: Invalid JSON body
+          schema:
+            $ref: '#/definitions/autoapprovers.ErrorResponse'
+        "409":
+          description: autoApprovers already exists
+          schema:
+            $ref: '#/definitions/autoapprovers.ErrorResponse'
+        "500":
+          description: Failed to parse or save autoApprovers
+          schema:
+            $ref: '#/definitions/autoapprovers.ErrorResponse'
+      summary: Create auto-approvers
+      tags:
+      - AutoApprovers
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing auto-approvers struct. If none exists, returns
+        404 (or optionally creates).
+      parameters:
+      - description: Updated autoApprovers data
+        in: body
+        name: autoApprovers
+        required: true
+        schema:
+          $ref: '#/definitions/autoapprovers.ACLAutoApproversDoc'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/autoapprovers.ACLAutoApproversDoc'
+        "400":
+          description: Invalid JSON body
+          schema:
+            $ref: '#/definitions/autoapprovers.ErrorResponse'
+        "404":
+          description: No autoApprovers found to update
+          schema:
+            $ref: '#/definitions/autoapprovers.ErrorResponse'
+        "500":
+          description: Failed to update autoApprovers
+          schema:
+            $ref: '#/definitions/autoapprovers.ErrorResponse'
+      summary: Update auto-approvers
+      tags:
+      - AutoApprovers
+  /derpmap:
+    delete:
+      consumes:
+      - application/json
+      description: Removes the DERPMap from state. Returns 404 if not found.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: DERPMap deleted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: No DERPMap found to delete
+          schema:
+            $ref: '#/definitions/derpmap.ErrorResponse'
+        "500":
+          description: Failed to delete DERPMap
+          schema:
+            $ref: '#/definitions/derpmap.ErrorResponse'
+      summary: Delete the DERPMap
+      tags:
+      - DERPMap
+    get:
+      consumes:
+      - application/json
+      description: Returns the entire ACLDERPMap if it exists, else returns an empty
+        doc or 404.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: DERP map found (or empty)
+          schema:
+            $ref: '#/definitions/derpmap.ACLDERPMapDoc'
+        "500":
+          description: Failed to parse DERPMap
+          schema:
+            $ref: '#/definitions/derpmap.ErrorResponse'
+      summary: Get DERP map
+      tags:
+      - DERPMap
+    post:
+      consumes:
+      - application/json
+      description: Creates a new DERPMap if none exists. If one already exists, returns
+        409.
+      parameters:
+      - description: DERPMap data
+        in: body
+        name: derpMap
+        required: true
+        schema:
+          $ref: '#/definitions/derpmap.ACLDERPMapDoc'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/derpmap.ACLDERPMapDoc'
+        "400":
+          description: Invalid JSON body
+          schema:
+            $ref: '#/definitions/derpmap.ErrorResponse'
+        "409":
+          description: DERPMap already exists
+          schema:
+            $ref: '#/definitions/derpmap.ErrorResponse'
+        "500":
+          description: Failed to parse or save DERPMap
+          schema:
+            $ref: '#/definitions/derpmap.ErrorResponse'
+      summary: Create a new DERPMap
+      tags:
+      - DERPMap
+    put:
+      consumes:
+      - application/json
+      description: Updates the DERPMap if it exists, or returns 404 if not found.
+      parameters:
+      - description: Updated DERPMap data
+        in: body
+        name: derpMap
+        required: true
+        schema:
+          $ref: '#/definitions/derpmap.ACLDERPMapDoc'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/derpmap.ACLDERPMapDoc'
+        "400":
+          description: Invalid JSON body
+          schema:
+            $ref: '#/definitions/derpmap.ErrorResponse'
+        "404":
+          description: No DERPMap found to update
+          schema:
+            $ref: '#/definitions/derpmap.ErrorResponse'
+        "500":
+          description: Failed to update DERPMap
+          schema:
+            $ref: '#/definitions/derpmap.ErrorResponse'
+      summary: Update an existing DERPMap
+      tags:
+      - DERPMap
+  /groups:
+    delete:
+      consumes:
+      - application/json
+      description: 'Deletes a group by name. Expects a JSON body with { "name": "groupName"
+        }.'
+      parameters:
+      - description: Delete group request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/groups.DeleteGroupRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Group deleted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad request or missing name
+          schema:
+            $ref: '#/definitions/groups.ErrorResponse'
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/groups.ErrorResponse'
+        "500":
+          description: Failed to save changes
+          schema:
+            $ref: '#/definitions/groups.ErrorResponse'
+      summary: Delete a group
+      tags:
+      - Groups
+    get:
+      consumes:
+      - application/json
+      description: Returns an array of Groups. Each group has a name and members.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/groups.Group'
+            type: array
+        "500":
+          description: Failed to parse groups
+          schema:
+            $ref: '#/definitions/groups.ErrorResponse'
+      summary: List all groups
+      tags:
+      - Groups
+    post:
+      consumes:
+      - application/json
+      description: Creates a group with a unique name. Returns 409 if the group name
+        already exists.
+      parameters:
+      - description: Group to create
+        in: body
+        name: group
+        required: true
+        schema:
+          $ref: '#/definitions/groups.Group'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/groups.Group'
+        "400":
+          description: Bad request or missing name
+          schema:
+            $ref: '#/definitions/groups.ErrorResponse'
+        "409":
+          description: Group already exists
+          schema:
+            $ref: '#/definitions/groups.ErrorResponse'
+        "500":
+          description: Failed to parse or save groups
+          schema:
+            $ref: '#/definitions/groups.ErrorResponse'
+      summary: Create a new group
+      tags:
+      - Groups
+    put:
+      consumes:
+      - application/json
+      description: Updates the group's members by matching on the group name. Returns
+        404 if not found.
+      parameters:
+      - description: Group with updated members
+        in: body
+        name: group
+        required: true
+        schema:
+          $ref: '#/definitions/groups.Group'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/groups.Group'
+        "400":
+          description: Bad request or missing name
+          schema:
+            $ref: '#/definitions/groups.ErrorResponse'
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/groups.ErrorResponse'
+        "500":
+          description: Failed to update group
+          schema:
+            $ref: '#/definitions/groups.ErrorResponse'
+      summary: Update an existing group
+      tags:
+      - Groups
+  /groups/{name}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a specific group by its name (e.g. "engineering").
+      parameters:
+      - description: Group name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/groups.Group'
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/groups.ErrorResponse'
+        "500":
+          description: Failed to parse groups
+          schema:
+            $ref: '#/definitions/groups.ErrorResponse'
+      summary: Get group by name
+      tags:
+      - Groups
+  /hosts:
+    delete:
+      consumes:
+      - application/json
+      description: 'Deletes a host by name, based on JSON input { "name": "..." }.'
+      parameters:
+      - description: Delete host request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/hosts.DeleteHostRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Host deleted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Missing name
+          schema:
+            $ref: '#/definitions/hosts.ErrorResponse'
+        "404":
+          description: Host not found
+          schema:
+            $ref: '#/definitions/hosts.ErrorResponse'
+        "500":
+          description: Failed to save changes
+          schema:
+            $ref: '#/definitions/hosts.ErrorResponse'
+      summary: Delete a host
+      tags:
+      - Hosts
+    get:
+      consumes:
+      - application/json
+      description: Returns an array of Host objects. The final data is a map in storage,
+        converted back to an array.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/hosts.Host'
+            type: array
+        "500":
+          description: Failed to parse hosts
+          schema:
+            $ref: '#/definitions/hosts.ErrorResponse'
+      summary: List all hosts
+      tags:
+      - Hosts
+    post:
+      consumes:
+      - application/json
+      description: Creates a host mapping from name to IP. Returns 409 if the hostname
+        already exists.
+      parameters:
+      - description: Host to create
+        in: body
+        name: host
+        required: true
+        schema:
+          $ref: '#/definitions/hosts.Host'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/hosts.Host'
+        "400":
+          description: Bad request or missing fields
+          schema:
+            $ref: '#/definitions/hosts.ErrorResponse'
+        "409":
+          description: Host already exists
+          schema:
+            $ref: '#/definitions/hosts.ErrorResponse'
+        "500":
+          description: Failed to parse or save hosts
+          schema:
+            $ref: '#/definitions/hosts.ErrorResponse'
+      summary: Create a new host
+      tags:
+      - Hosts
+    put:
+      consumes:
+      - application/json
+      description: Updates the IP for a host by matching the 'name'. Returns 404 if
+        not found.
+      parameters:
+      - description: Updated host info
+        in: body
+        name: host
+        required: true
+        schema:
+          $ref: '#/definitions/hosts.Host'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hosts.Host'
+        "400":
+          description: Bad request or missing fields
+          schema:
+            $ref: '#/definitions/hosts.ErrorResponse'
+        "404":
+          description: Host not found
+          schema:
+            $ref: '#/definitions/hosts.ErrorResponse'
+        "500":
+          description: Failed to update host
+          schema:
+            $ref: '#/definitions/hosts.ErrorResponse'
+      summary: Update an existing host
+      tags:
+      - Hosts
+  /hosts/{name}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a single host by its name (hostname).
+      parameters:
+      - description: Hostname
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/hosts.Host'
+        "404":
+          description: Host not found
+          schema:
+            $ref: '#/definitions/hosts.ErrorResponse'
+        "500":
+          description: Failed to parse hosts
+          schema:
+            $ref: '#/definitions/hosts.ErrorResponse'
+      summary: Get a host by name
+      tags:
+      - Hosts
+  /nodeattrs:
+    delete:
+      consumes:
+      - application/json
+      description: Deletes by specifying its ID in the request body.
+      parameters:
+      - description: Delete NodeAttr request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/nodeattrs.deleteNodeAttrRequestDoc'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Node attribute deleted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Missing or invalid ID
+          schema:
+            $ref: '#/definitions/nodeattrs.ErrorResponse'
+        "404":
+          description: NodeAttr not found with that id
+          schema:
+            $ref: '#/definitions/nodeattrs.ErrorResponse'
+        "500":
+          description: Failed to delete node attribute
+          schema:
+            $ref: '#/definitions/nodeattrs.ErrorResponse'
+      summary: Delete a node attribute grant
+      tags:
+      - NodeAttrs
+    get:
+      consumes:
+      - application/json
+      description: Returns the entire list of ExtendedNodeAttrGrant objects from state.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/nodeattrs.ExtendedNodeAttrGrantDoc'
+            type: array
+        "500":
+          description: Failed to parse node attributes
+          schema:
+            $ref: '#/definitions/nodeattrs.ErrorResponse'
+      summary: List all node attribute grants
+      tags:
+      - NodeAttrs
+    post:
+      consumes:
+      - application/json
+      description: Creates a new ExtendedNodeAttrGrant with either `attr` or `app`.
+        If `app` is set, `target` is forced to ["*"].
+      parameters:
+      - description: NodeAttrGrant input
+        in: body
+        name: grant
+        required: true
+        schema:
+          $ref: '#/definitions/nodeattrs.NodeAttrGrantInputDoc'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/nodeattrs.ExtendedNodeAttrGrantDoc'
+        "400":
+          description: Either 'attr' or 'app' must be set, but not both
+          schema:
+            $ref: '#/definitions/nodeattrs.ErrorResponse'
+        "500":
+          description: Failed to parse node attributes or save new grant
+          schema:
+            $ref: '#/definitions/nodeattrs.ErrorResponse'
+      summary: Create a new node attribute grant
+      tags:
+      - NodeAttrs
+    put:
+      consumes:
+      - application/json
+      description: Updates a grant by ID. If `app` is set, `target` is forced to ["*"].
+      parameters:
+      - description: Update NodeAttr request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/nodeattrs.updateNodeAttrRequestDoc'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nodeattrs.ExtendedNodeAttrGrantDoc'
+        "400":
+          description: Invalid JSON or missing fields
+          schema:
+            $ref: '#/definitions/nodeattrs.ErrorResponse'
+        "404":
+          description: NodeAttr not found
+          schema:
+            $ref: '#/definitions/nodeattrs.ErrorResponse'
+        "500":
+          description: Failed to parse or update node attribute
+          schema:
+            $ref: '#/definitions/nodeattrs.ErrorResponse'
+      summary: Update an existing node attribute grant
+      tags:
+      - NodeAttrs
+  /nodeattrs/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a single ExtendedNodeAttrGrant by its stable UUID.
+      parameters:
+      - description: NodeAttrGrant ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/nodeattrs.ExtendedNodeAttrGrantDoc'
+        "404":
+          description: No nodeattr found with that id
+          schema:
+            $ref: '#/definitions/nodeattrs.ErrorResponse'
+        "500":
+          description: Failed to parse node attributes
+          schema:
+            $ref: '#/definitions/nodeattrs.ErrorResponse'
+      summary: Get node attribute grant by ID
+      tags:
+      - NodeAttrs
+swagger: "2.0"
