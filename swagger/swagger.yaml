@@ -298,9 +298,182 @@ definitions:
       id:
         type: string
     type: object
+  postures.DefaultPostureBody:
+    properties:
+      defaultSourcePosture:
+        items:
+          type: string
+        type: array
+    type: object
+  postures.DeletePostureRequest:
+    properties:
+      name:
+        type: string
+    type: object
+  postures.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  postures.Posture:
+    description: Posture defines a named posture with a list of rule expressions.
+    properties:
+      name:
+        description: Name is the unique name of this posture.
+        type: string
+      rules:
+        description: Rules is a list of string expressions describing posture requirements.
+        items:
+          type: string
+        type: array
+    required:
+    - name
+    type: object
+  postures.listAllResponse:
+    properties:
+      defaultSourcePosture:
+        items:
+          type: string
+        type: array
+      items:
+        items:
+          $ref: '#/definitions/postures.Posture'
+        type: array
+    type: object
+  settings.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  settings.Settings:
+    description: Settings define certain toggles or values controlling features like
+      IPv4 usage, NAT routing, etc.
+    properties:
+      disableIPv4:
+        description: DisableIPv4 indicates whether IPv4 traffic is disabled.
+        type: boolean
+      oneCGNATRoute:
+        description: OneCGNATRoute can store a special CGNAT route (e.g., "100.64.0.0/10").
+        type: string
+      randomizeClientPort:
+        description: RandomizeClientPort indicates whether to use a random local port
+          instead of a fixed one.
+        type: boolean
+    type: object
+  ssh.ACLSSH:
+    description: ACLSSH defines fields for a single SSH rule, such as action, source,
+      and destination.
+    properties:
+      acceptEnv:
+        description: AcceptEnv is a list of environment variables allowed to pass
+          through the SSH session.
+        items:
+          type: string
+        type: array
+      action:
+        description: Action can be "accept" or "check".
+        type: string
+      checkPeriod:
+        description: CheckPeriod is only meaningful if Action == "check" (e.g. "12h",
+          "30m").
+        type: string
+      dst:
+        description: Dst is a list of destination tags or CIDRs for this SSH rule.
+        items:
+          type: string
+        type: array
+      src:
+        description: Src is a list of source tags or CIDRs allowed by this SSH rule.
+        items:
+          type: string
+        type: array
+      users:
+        description: Users is a list of SSH users permitted by this rule.
+        items:
+          type: string
+        type: array
+    type: object
+  ssh.DeleteRequest:
+    properties:
+      id:
+        type: string
+    type: object
+  ssh.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  ssh.ExtendedSSHEntry:
+    description: ExtendedSSHEntry is stored in TACL with a UUID "id" plus the SSH
+      fields.
+    properties:
+      acceptEnv:
+        description: AcceptEnv is a list of environment variables allowed to pass
+          through the SSH session.
+        items:
+          type: string
+        type: array
+      action:
+        description: Action can be "accept" or "check".
+        type: string
+      checkPeriod:
+        description: CheckPeriod is only meaningful if Action == "check" (e.g. "12h",
+          "30m").
+        type: string
+      dst:
+        description: Dst is a list of destination tags or CIDRs for this SSH rule.
+        items:
+          type: string
+        type: array
+      id:
+        description: ID is a stable UUID for each SSH rule.
+        type: string
+      src:
+        description: Src is a list of source tags or CIDRs allowed by this SSH rule.
+        items:
+          type: string
+        type: array
+      users:
+        description: Users is a list of SSH users permitted by this rule.
+        items:
+          type: string
+        type: array
+    type: object
+  ssh.UpdateRequest:
+    properties:
+      id:
+        type: string
+      rule:
+        $ref: '#/definitions/ssh.ACLSSH'
+    type: object
+  tagowners.ErrorResponse:
+    properties:
+      error:
+        type: string
+    type: object
+  tagowners.TagOwner:
+    description: TagOwner associates a tag name (e.g. "webserver") with a list of
+      owners.
+    properties:
+      name:
+        description: Name is the name of the tag (e.g. "webserver").
+        type: string
+      owners:
+        description: Owners is a list of owners for this tag.
+        items:
+          type: string
+        type: array
+    required:
+    - name
+    type: object
+  tagowners.deleteTagOwnerRequest:
+    properties:
+      name:
+        type: string
+    type: object
 info:
   contact:
-    email: maintainer@example.com
+    email: mail@lbrlabs.com
     name: TACL Maintainers
     url: https://github.com/lbrlabs/tacl
   description: A Tailscale-based ACL management server.
@@ -688,7 +861,7 @@ paths:
       consumes:
       - application/json
       description: Updates an existing auto-approvers struct. If none exists, returns
-        404 (or optionally creates).
+        404.
       parameters:
       - description: Updated autoApprovers data
         in: body
@@ -1285,4 +1458,646 @@ paths:
       summary: Get node attribute grant by ID
       tags:
       - NodeAttrs
+  /postures:
+    delete:
+      consumes:
+      - application/json
+      description: 'Deletes a named posture by JSON body. Expects { "name": "<postureName>"
+        }.'
+      parameters:
+      - description: Delete posture request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/postures.DeletePostureRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Posture deleted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad request or missing name
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+        "404":
+          description: Posture not found
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+        "500":
+          description: Failed to save changes
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+      summary: Delete a posture
+      tags:
+      - Postures
+    get:
+      consumes:
+      - application/json
+      description: Returns an object containing "defaultSourcePosture" and an array
+        of named "items".
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/postures.listAllResponse'
+        "500":
+          description: Failed to parse or load postures
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+      summary: List all named postures + default
+      tags:
+      - Postures
+    post:
+      consumes:
+      - application/json
+      description: Creates a posture with unique name. Returns 409 if that name already
+        exists.
+      parameters:
+      - description: Posture to create
+        in: body
+        name: posture
+        required: true
+        schema:
+          $ref: '#/definitions/postures.Posture'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/postures.Posture'
+        "400":
+          description: Bad request or missing name
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+        "409":
+          description: Posture already exists
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+        "500":
+          description: Failed to parse or save postures
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+      summary: Create a new posture
+      tags:
+      - Postures
+    put:
+      consumes:
+      - application/json
+      description: Updates the posture by matching on its name. Returns 404 if not
+        found.
+      parameters:
+      - description: Posture with updated rules
+        in: body
+        name: posture
+        required: true
+        schema:
+          $ref: '#/definitions/postures.Posture'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/postures.Posture'
+        "400":
+          description: Missing fields
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+        "404":
+          description: Posture not found
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+        "500":
+          description: Failed to update posture
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+      summary: Update a posture
+      tags:
+      - Postures
+  /postures/{name}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a single posture object by its name (e.g. "latestMac").
+      parameters:
+      - description: Name of the posture
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/postures.Posture'
+        "404":
+          description: Posture not found
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+        "500":
+          description: Failed to parse or load postures
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+      summary: Get posture by name
+      tags:
+      - Postures
+  /postures/default:
+    delete:
+      consumes:
+      - application/json
+      description: Removes any default posture rules by setting them to nil.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: defaultSourcePosture removed
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Failed to delete default posture
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+      summary: Delete the default posture
+      tags:
+      - Postures
+    get:
+      consumes:
+      - application/json
+      description: Returns the "defaultSourcePosture" array if set, otherwise an empty
+        array or 200 with none.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'defaultSourcePosture: []string'
+          schema:
+            additionalProperties:
+              items:
+                type: string
+              type: array
+            type: object
+        "500":
+          description: Failed to parse or load postures
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+      summary: Get the default posture
+      tags:
+      - Postures
+    put:
+      consumes:
+      - application/json
+      description: Overwrites the default posture with the given array of rules.
+      parameters:
+      - description: Default posture array
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/postures.DefaultPostureBody'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'defaultSourcePosture: updated array'
+          schema:
+            additionalProperties:
+              items:
+                type: string
+              type: array
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+        "500":
+          description: Failed to set default posture
+          schema:
+            $ref: '#/definitions/postures.ErrorResponse'
+      summary: Set the default posture
+      tags:
+      - Postures
+  /settings:
+    delete:
+      consumes:
+      - application/json
+      description: Removes the current settings if present; returns 404 if none exist.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Settings deleted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: No existing settings found to delete
+          schema:
+            $ref: '#/definitions/settings.ErrorResponse'
+        "500":
+          description: Failed to delete settings
+          schema:
+            $ref: '#/definitions/settings.ErrorResponse'
+      summary: Delete settings
+      tags:
+      - Settings
+    get:
+      consumes:
+      - application/json
+      description: Returns the current settings or an empty struct if none exist.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/settings.Settings'
+        "500":
+          description: Failed to parse settings
+          schema:
+            $ref: '#/definitions/settings.ErrorResponse'
+      summary: Retrieve the settings
+      tags:
+      - Settings
+    post:
+      consumes:
+      - application/json
+      description: Creates a new Settings object if none exist; returns 409 if one
+        already exists.
+      parameters:
+      - description: Settings to create
+        in: body
+        name: settings
+        required: true
+        schema:
+          $ref: '#/definitions/settings.Settings'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/settings.Settings'
+        "400":
+          description: Invalid JSON body
+          schema:
+            $ref: '#/definitions/settings.ErrorResponse'
+        "409":
+          description: Settings already exist
+          schema:
+            $ref: '#/definitions/settings.ErrorResponse'
+        "500":
+          description: Failed to check or save settings
+          schema:
+            $ref: '#/definitions/settings.ErrorResponse'
+      summary: Create new settings
+      tags:
+      - Settings
+    put:
+      consumes:
+      - application/json
+      description: Updates the current settings. Returns 404 if none exist.
+      parameters:
+      - description: Updated settings
+        in: body
+        name: settings
+        required: true
+        schema:
+          $ref: '#/definitions/settings.Settings'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/settings.Settings'
+        "400":
+          description: Invalid JSON body
+          schema:
+            $ref: '#/definitions/settings.ErrorResponse'
+        "404":
+          description: No existing settings to update
+          schema:
+            $ref: '#/definitions/settings.ErrorResponse'
+        "500":
+          description: Failed to update settings
+          schema:
+            $ref: '#/definitions/settings.ErrorResponse'
+      summary: Update existing settings
+      tags:
+      - Settings
+  /ssh:
+    delete:
+      consumes:
+      - application/json
+      description: User must provide JSON like { "id":"<uuid>" } to remove the rule
+        with matching ID.
+      parameters:
+      - description: Delete SSH rule request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/ssh.DeleteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: SSH rule deleted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Missing or invalid ID
+          schema:
+            $ref: '#/definitions/ssh.ErrorResponse'
+        "404":
+          description: SSH rule not found with that ID
+          schema:
+            $ref: '#/definitions/ssh.ErrorResponse'
+        "500":
+          description: Failed to delete SSH rule
+          schema:
+            $ref: '#/definitions/ssh.ErrorResponse'
+      summary: Delete an SSH rule
+      tags:
+      - SSH
+    get:
+      consumes:
+      - application/json
+      description: Returns the entire slice of ExtendedSSHEntry from state.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: List of SSH rules
+          schema:
+            items:
+              $ref: '#/definitions/ssh.ExtendedSSHEntry'
+            type: array
+        "500":
+          description: Failed to parse SSH rules
+          schema:
+            $ref: '#/definitions/ssh.ErrorResponse'
+      summary: List all SSH rules
+      tags:
+      - SSH
+    post:
+      consumes:
+      - application/json
+      description: Appends a new ExtendedSSHEntry (with auto-generated ID) to the
+        list of SSH rules.
+      parameters:
+      - description: SSH rule fields
+        in: body
+        name: rule
+        required: true
+        schema:
+          $ref: '#/definitions/ssh.ACLSSH'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/ssh.ExtendedSSHEntry'
+        "400":
+          description: Invalid JSON or fields
+          schema:
+            $ref: '#/definitions/ssh.ErrorResponse'
+        "500":
+          description: Failed to parse or save SSH rules
+          schema:
+            $ref: '#/definitions/ssh.ErrorResponse'
+      summary: Create a new SSH rule
+      tags:
+      - SSH
+    put:
+      consumes:
+      - application/json
+      description: 'User must provide JSON like { "id":"<uuid>", "rule": {...} } to
+        replace the rule with matching ID.'
+      parameters:
+      - description: Update SSH request body
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/ssh.UpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ssh.ExtendedSSHEntry'
+        "400":
+          description: Bad request or missing fields
+          schema:
+            $ref: '#/definitions/ssh.ErrorResponse'
+        "404":
+          description: SSH rule not found with that ID
+          schema:
+            $ref: '#/definitions/ssh.ErrorResponse'
+        "500":
+          description: Failed to parse or update SSH rule
+          schema:
+            $ref: '#/definitions/ssh.ErrorResponse'
+      summary: Update an existing SSH rule
+      tags:
+      - SSH
+  /ssh/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves a single ExtendedSSHEntry by its stable UUID.
+      parameters:
+      - description: UUID of the SSH rule
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/ssh.ExtendedSSHEntry'
+        "404":
+          description: SSH rule not found with that ID
+          schema:
+            $ref: '#/definitions/ssh.ErrorResponse'
+        "500":
+          description: Failed to parse SSH rules
+          schema:
+            $ref: '#/definitions/ssh.ErrorResponse'
+      summary: Get SSH rule by ID
+      tags:
+      - SSH
+  /tagowners:
+    delete:
+      consumes:
+      - application/json
+      description: 'Expects JSON: { "name": "webserver" } to remove the matching TagOwner.'
+      parameters:
+      - description: Delete TagOwner request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/tagowners.deleteTagOwnerRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: TagOwner deleted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad request or missing name
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+        "404":
+          description: TagOwner not found
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+        "500":
+          description: Failed to save changes
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+      summary: Delete a tag owner
+      tags:
+      - TagOwners
+    get:
+      consumes:
+      - application/json
+      description: Returns an array of TagOwner objects from state.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/tagowners.TagOwner'
+            type: array
+        "500":
+          description: Failed to parse tagOwners
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+      summary: List all tag owners
+      tags:
+      - TagOwners
+    post:
+      consumes:
+      - application/json
+      description: Creates a TagOwner. Returns 409 if name already exists.
+      parameters:
+      - description: TagOwner to create
+        in: body
+        name: tagOwner
+        required: true
+        schema:
+          $ref: '#/definitions/tagowners.TagOwner'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/tagowners.TagOwner'
+        "400":
+          description: Bad request or missing name
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+        "409":
+          description: TagOwner already exists
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+        "500":
+          description: Failed to parse or save tagOwners
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+      summary: Create a new tag owner
+      tags:
+      - TagOwners
+    put:
+      consumes:
+      - application/json
+      description: 'Updates the TagOwner with a matching name. Expects JSON: { "name":
+        "...", "owners": [...] }.'
+      parameters:
+      - description: TagOwner to update
+        in: body
+        name: tagOwner
+        required: true
+        schema:
+          $ref: '#/definitions/tagowners.TagOwner'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tagowners.TagOwner'
+        "400":
+          description: Bad request or missing name
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+        "404":
+          description: TagOwner not found
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+        "500":
+          description: Failed to parse or save changes
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+      summary: Update a tag owner
+      tags:
+      - TagOwners
+  /tagowners/{name}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves the TagOwner with the given name.
+      parameters:
+      - description: Tag name
+        in: path
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/tagowners.TagOwner'
+        "404":
+          description: TagOwner not found
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+        "500":
+          description: Failed to parse tagOwners
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+      summary: Get a tag owner by name
+      tags:
+      - TagOwners
 swagger: "2.0"

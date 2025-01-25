@@ -91,7 +91,7 @@ type CLI struct {
 //
 // @contact.name  TACL Maintainers
 // @contact.url   https://github.com/lbrlabs/tacl
-// @contact.email maintainer@example.com
+// @contact.email mail@lbrlabs.com
 //
 // @license.name  MIT
 // @license.url   https://opensource.org/licenses/MIT

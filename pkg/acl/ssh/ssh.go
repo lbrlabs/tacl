@@ -45,6 +45,10 @@ type UpdateRequest struct {
 	Rule ACLSSH `json:"rule"`
 }
 
+type DeleteRequest struct {
+	ID string `json:"id"`
+}
+
 // RegisterRoutes wires up the SSH rules routes at /ssh.
 //
 //   GET     /ssh        => list all ExtendedSSHEntry
@@ -175,7 +179,7 @@ func createSSH(c *gin.Context, state *common.State) {
 // @Tags         SSH
 // @Accept       json
 // @Produce      json
-// @Param        body body updateRequest true "Update SSH request body"
+// @Param        body body UpdateRequest true "Update SSH request body"
 // @Success      200 {object} ExtendedSSHEntry
 // @Failure      400 {object} ErrorResponse "Bad request or missing fields"
 // @Failure      404 {object} ErrorResponse "SSH rule not found with that ID"
@@ -183,7 +187,7 @@ func createSSH(c *gin.Context, state *common.State) {
 // @Router       /ssh [put]
 func updateSSH(c *gin.Context, state *common.State) {
 
-	var req updateRequest
+	var req UpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
@@ -241,17 +245,15 @@ func updateSSH(c *gin.Context, state *common.State) {
 // @Tags         SSH
 // @Accept       json
 // @Produce      json
-// @Param        body body deleteRequest true "Delete SSH rule request"
+// @Param        body body DeleteRequest true "Delete SSH rule request"
 // @Success      200 {object} map[string]string "SSH rule deleted"
 // @Failure      400 {object} ErrorResponse "Missing or invalid ID"
 // @Failure      404 {object} ErrorResponse "SSH rule not found with that ID"
 // @Failure      500 {object} ErrorResponse "Failed to delete SSH rule"
 // @Router       /ssh [delete]
 func deleteSSH(c *gin.Context, state *common.State) {
-	type deleteRequest struct {
-		ID string `json:"id"`
-	}
-	var req deleteRequest
+	
+	var req DeleteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return

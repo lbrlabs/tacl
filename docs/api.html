@@ -1,0 +1,30 @@
+<!-- api.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Tacl API Docs</title>
+  <!-- Load Redoc from CDN -->
+  <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #redoc-container {
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="redoc-container"></div>
+
+  <script>
+    Redoc.init('https://raw.githubusercontent.com/lbrlabs/tacl/refs/heads/main/swagger/swagger.json', {
+      scrollYOffset: 50,
+      hideLoading: true,
+    }, document.getElementById('redoc-container'));
+  </script>
+</body>
+</html>

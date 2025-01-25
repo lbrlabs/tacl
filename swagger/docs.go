@@ -12,7 +12,7 @@ const docTemplate = `{
         "contact": {
             "name": "TACL Maintainers",
             "url": "https://github.com/lbrlabs/tacl",
-            "email": "maintainer@example.com"
+            "email": "mail@lbrlabs.com"
         },
         "license": {
             "name": "MIT",
@@ -498,7 +498,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Updates an existing auto-approvers struct. If none exists, returns 404 (or optionally creates).",
+                "description": "Updates an existing auto-approvers struct. If none exists, returns 404.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1479,6 +1479,964 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/postures": {
+            "get": {
+                "description": "Returns an object containing \"defaultSourcePosture\" and an array of named \"items\".",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Postures"
+                ],
+                "summary": "List all named postures + default",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/postures.listAllResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse or load postures",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Updates the posture by matching on its name. Returns 404 if not found.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Postures"
+                ],
+                "summary": "Update a posture",
+                "parameters": [
+                    {
+                        "description": "Posture with updated rules",
+                        "name": "posture",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/postures.Posture"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/postures.Posture"
+                        }
+                    },
+                    "400": {
+                        "description": "Missing fields",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Posture not found",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to update posture",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a posture with unique name. Returns 409 if that name already exists.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Postures"
+                ],
+                "summary": "Create a new posture",
+                "parameters": [
+                    {
+                        "description": "Posture to create",
+                        "name": "posture",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/postures.Posture"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/postures.Posture"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request or missing name",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Posture already exists",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse or save postures",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Deletes a named posture by JSON body. Expects { \"name\": \"\u003cpostureName\u003e\" }.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Postures"
+                ],
+                "summary": "Delete a posture",
+                "parameters": [
+                    {
+                        "description": "Delete posture request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/postures.DeletePostureRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Posture deleted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request or missing name",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Posture not found",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to save changes",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/postures/default": {
+            "get": {
+                "description": "Returns the \"defaultSourcePosture\" array if set, otherwise an empty array or 200 with none.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Postures"
+                ],
+                "summary": "Get the default posture",
+                "responses": {
+                    "200": {
+                        "description": "defaultSourcePosture: []string",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse or load postures",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Overwrites the default posture with the given array of rules.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Postures"
+                ],
+                "summary": "Set the default posture",
+                "parameters": [
+                    {
+                        "description": "Default posture array",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/postures.DefaultPostureBody"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "defaultSourcePosture: updated array",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to set default posture",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Removes any default posture rules by setting them to nil.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Postures"
+                ],
+                "summary": "Delete the default posture",
+                "responses": {
+                    "200": {
+                        "description": "defaultSourcePosture removed",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to delete default posture",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/postures/{name}": {
+            "get": {
+                "description": "Retrieves a single posture object by its name (e.g. \"latestMac\").",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Postures"
+                ],
+                "summary": "Get posture by name",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Name of the posture",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/postures.Posture"
+                        }
+                    },
+                    "404": {
+                        "description": "Posture not found",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse or load postures",
+                        "schema": {
+                            "$ref": "#/definitions/postures.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/settings": {
+            "get": {
+                "description": "Returns the current settings or an empty struct if none exist.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Settings"
+                ],
+                "summary": "Retrieve the settings",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/settings.Settings"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse settings",
+                        "schema": {
+                            "$ref": "#/definitions/settings.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Updates the current settings. Returns 404 if none exist.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Settings"
+                ],
+                "summary": "Update existing settings",
+                "parameters": [
+                    {
+                        "description": "Updated settings",
+                        "name": "settings",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/settings.Settings"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/settings.Settings"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON body",
+                        "schema": {
+                            "$ref": "#/definitions/settings.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "No existing settings to update",
+                        "schema": {
+                            "$ref": "#/definitions/settings.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to update settings",
+                        "schema": {
+                            "$ref": "#/definitions/settings.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a new Settings object if none exist; returns 409 if one already exists.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Settings"
+                ],
+                "summary": "Create new settings",
+                "parameters": [
+                    {
+                        "description": "Settings to create",
+                        "name": "settings",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/settings.Settings"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/settings.Settings"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON body",
+                        "schema": {
+                            "$ref": "#/definitions/settings.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Settings already exist",
+                        "schema": {
+                            "$ref": "#/definitions/settings.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to check or save settings",
+                        "schema": {
+                            "$ref": "#/definitions/settings.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Removes the current settings if present; returns 404 if none exist.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Settings"
+                ],
+                "summary": "Delete settings",
+                "responses": {
+                    "200": {
+                        "description": "Settings deleted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "No existing settings found to delete",
+                        "schema": {
+                            "$ref": "#/definitions/settings.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to delete settings",
+                        "schema": {
+                            "$ref": "#/definitions/settings.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ssh": {
+            "get": {
+                "description": "Returns the entire slice of ExtendedSSHEntry from state.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SSH"
+                ],
+                "summary": "List all SSH rules",
+                "responses": {
+                    "200": {
+                        "description": "List of SSH rules",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/ssh.ExtendedSSHEntry"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse SSH rules",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "User must provide JSON like { \"id\":\"\u003cuuid\u003e\", \"rule\": {...} } to replace the rule with matching ID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SSH"
+                ],
+                "summary": "Update an existing SSH rule",
+                "parameters": [
+                    {
+                        "description": "Update SSH request body",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ssh.UpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ExtendedSSHEntry"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request or missing fields",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "SSH rule not found with that ID",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse or update SSH rule",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Appends a new ExtendedSSHEntry (with auto-generated ID) to the list of SSH rules.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SSH"
+                ],
+                "summary": "Create a new SSH rule",
+                "parameters": [
+                    {
+                        "description": "SSH rule fields",
+                        "name": "rule",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ACLSSH"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ExtendedSSHEntry"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid JSON or fields",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse or save SSH rules",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "User must provide JSON like { \"id\":\"\u003cuuid\u003e\" } to remove the rule with matching ID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SSH"
+                ],
+                "summary": "Delete an SSH rule",
+                "parameters": [
+                    {
+                        "description": "Delete SSH rule request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/ssh.DeleteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "SSH rule deleted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Missing or invalid ID",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "SSH rule not found with that ID",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to delete SSH rule",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/ssh/{id}": {
+            "get": {
+                "description": "Retrieves a single ExtendedSSHEntry by its stable UUID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SSH"
+                ],
+                "summary": "Get SSH rule by ID",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "UUID of the SSH rule",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ExtendedSSHEntry"
+                        }
+                    },
+                    "404": {
+                        "description": "SSH rule not found with that ID",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse SSH rules",
+                        "schema": {
+                            "$ref": "#/definitions/ssh.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tagowners": {
+            "get": {
+                "description": "Returns an array of TagOwner objects from state.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TagOwners"
+                ],
+                "summary": "List all tag owners",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/tagowners.TagOwner"
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse tagOwners",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Updates the TagOwner with a matching name. Expects JSON: { \"name\": \"...\", \"owners\": [...] }.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TagOwners"
+                ],
+                "summary": "Update a tag owner",
+                "parameters": [
+                    {
+                        "description": "TagOwner to update",
+                        "name": "tagOwner",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.TagOwner"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.TagOwner"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request or missing name",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "TagOwner not found",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse or save changes",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a TagOwner. Returns 409 if name already exists.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TagOwners"
+                ],
+                "summary": "Create a new tag owner",
+                "parameters": [
+                    {
+                        "description": "TagOwner to create",
+                        "name": "tagOwner",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.TagOwner"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.TagOwner"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request or missing name",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "TagOwner already exists",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse or save tagOwners",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Expects JSON: { \"name\": \"webserver\" } to remove the matching TagOwner.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TagOwners"
+                ],
+                "summary": "Delete a tag owner",
+                "parameters": [
+                    {
+                        "description": "Delete TagOwner request",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.deleteTagOwnerRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "TagOwner deleted",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request or missing name",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "TagOwner not found",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to save changes",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tagowners/{name}": {
+            "get": {
+                "description": "Retrieves the TagOwner with the given name.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TagOwners"
+                ],
+                "summary": "Get a tag owner by name",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tag name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.TagOwner"
+                        }
+                    },
+                    "404": {
+                        "description": "TagOwner not found",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse tagOwners",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1905,6 +2863,247 @@ const docTemplate = `{
                     "$ref": "#/definitions/nodeattrs.NodeAttrGrantInputDoc"
                 },
                 "id": {
+                    "type": "string"
+                }
+            }
+        },
+        "postures.DefaultPostureBody": {
+            "type": "object",
+            "properties": {
+                "defaultSourcePosture": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "postures.DeletePostureRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "postures.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                }
+            }
+        },
+        "postures.Posture": {
+            "description": "Posture defines a named posture with a list of rule expressions.",
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "description": "Name is the unique name of this posture.",
+                    "type": "string"
+                },
+                "rules": {
+                    "description": "Rules is a list of string expressions describing posture requirements.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "postures.listAllResponse": {
+            "type": "object",
+            "properties": {
+                "defaultSourcePosture": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/postures.Posture"
+                    }
+                }
+            }
+        },
+        "settings.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                }
+            }
+        },
+        "settings.Settings": {
+            "description": "Settings define certain toggles or values controlling features like IPv4 usage, NAT routing, etc.",
+            "type": "object",
+            "properties": {
+                "disableIPv4": {
+                    "description": "DisableIPv4 indicates whether IPv4 traffic is disabled.",
+                    "type": "boolean"
+                },
+                "oneCGNATRoute": {
+                    "description": "OneCGNATRoute can store a special CGNAT route (e.g., \"100.64.0.0/10\").",
+                    "type": "string"
+                },
+                "randomizeClientPort": {
+                    "description": "RandomizeClientPort indicates whether to use a random local port instead of a fixed one.",
+                    "type": "boolean"
+                }
+            }
+        },
+        "ssh.ACLSSH": {
+            "description": "ACLSSH defines fields for a single SSH rule, such as action, source, and destination.",
+            "type": "object",
+            "properties": {
+                "acceptEnv": {
+                    "description": "AcceptEnv is a list of environment variables allowed to pass through the SSH session.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "action": {
+                    "description": "Action can be \"accept\" or \"check\".",
+                    "type": "string"
+                },
+                "checkPeriod": {
+                    "description": "CheckPeriod is only meaningful if Action == \"check\" (e.g. \"12h\", \"30m\").",
+                    "type": "string"
+                },
+                "dst": {
+                    "description": "Dst is a list of destination tags or CIDRs for this SSH rule.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "src": {
+                    "description": "Src is a list of source tags or CIDRs allowed by this SSH rule.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "users": {
+                    "description": "Users is a list of SSH users permitted by this rule.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "ssh.DeleteRequest": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                }
+            }
+        },
+        "ssh.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                }
+            }
+        },
+        "ssh.ExtendedSSHEntry": {
+            "description": "ExtendedSSHEntry is stored in TACL with a UUID \"id\" plus the SSH fields.",
+            "type": "object",
+            "properties": {
+                "acceptEnv": {
+                    "description": "AcceptEnv is a list of environment variables allowed to pass through the SSH session.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "action": {
+                    "description": "Action can be \"accept\" or \"check\".",
+                    "type": "string"
+                },
+                "checkPeriod": {
+                    "description": "CheckPeriod is only meaningful if Action == \"check\" (e.g. \"12h\", \"30m\").",
+                    "type": "string"
+                },
+                "dst": {
+                    "description": "Dst is a list of destination tags or CIDRs for this SSH rule.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "id": {
+                    "description": "ID is a stable UUID for each SSH rule.",
+                    "type": "string"
+                },
+                "src": {
+                    "description": "Src is a list of source tags or CIDRs allowed by this SSH rule.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "users": {
+                    "description": "Users is a list of SSH users permitted by this rule.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "ssh.UpdateRequest": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "rule": {
+                    "$ref": "#/definitions/ssh.ACLSSH"
+                }
+            }
+        },
+        "tagowners.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string"
+                }
+            }
+        },
+        "tagowners.TagOwner": {
+            "description": "TagOwner associates a tag name (e.g. \"webserver\") with a list of owners.",
+            "type": "object",
+            "required": [
+                "name"
+            ],
+            "properties": {
+                "name": {
+                    "description": "Name is the name of the tag (e.g. \"webserver\").",
+                    "type": "string"
+                },
+                "owners": {
+                    "description": "Owners is a list of owners for this tag.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "tagowners.deleteTagOwnerRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
                     "type": "string"
                 }
             }

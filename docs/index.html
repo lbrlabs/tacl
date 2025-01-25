@@ -2,45 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Document</title>
+  <title>Tacl Docs</title>
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
   <meta name="description" content="Description">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+
+  <!-- Docsify theme -->
   <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@4/lib/themes/vue.css">
-  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/prismjs@1/themes/prism-tomorrow.css">
-  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-yaml.min.js"></script>
-  <script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-bash.min.js"></script>
-  <!-- Load docsify-plugin-flexible-alerts -->
-  <script src="https://unpkg.com/docsify-plugin-flexible-alerts"></script>
-
-
-  <style>
-    .alert-note {
-      padding: 10px;
-      border-left: 4px solid #f39c12;
-      background-color: #fef8e6;
-      margin-bottom: 20px;
-    }
-  </style>
-  
-
 </head>
 <body>
   <div id="app"></div>
+
   <script>
     window.$docsify = {
-      
-      loadSidebar: true,
       name: 'Tacl',
-      repo: 'github.com/lbrlabs/tacl',
-      'flexible-alerts': {
-        style: 'flat'
-      }
+      loadSidebar: true,
     }
   </script>
-  <!-- Docsify v4 -->
-  <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>
-  <script src="https://unpkg.com/docsify-plugin-flexible-alerts"></script>
 
+  <!-- Docsify core -->
+  <script src="//cdn.jsdelivr.net/npm/docsify@4"></script>
+
+  <!-- Redoc -->
+  <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
 </body>
 </html>

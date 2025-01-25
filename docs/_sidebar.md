@@ -5,3 +5,4 @@
 * [Configuring State](state.md)
 * [Terraform](terraform.md)
 * [Examples](examples.md)
+* [API](api.html ':ignore')
