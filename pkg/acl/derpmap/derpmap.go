@@ -16,18 +16,29 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// ACLDERPNodeDoc represents a DERP node in the doc for swagger/JSON I/O.
+type ACLDERPNodeDoc struct {
+	Name     string `json:"name,omitempty"`
+	RegionID int    `json:"regionID,omitempty"`
+	HostName string `json:"hostName,omitempty"`
+	IPv4     string `json:"ipv4,omitempty"`
+	IPv6     string `json:"ipv6,omitempty"`
+}
+
 // ACLDERPRegionDoc duplicates relevant fields from tsclient.ACLDERPRegion
 // so Swag doesn't try to parse the external package.
 type ACLDERPRegionDoc struct {
-	RegionID   int    `json:"regionID,omitempty"`
-	RegionCode string `json:"regionCode,omitempty"`
-	// Add any other fields from tsclient.ACLDERPRegion you want documented.
+	RegionID   int              `json:"regionID,omitempty"`
+	RegionCode string           `json:"regionCode,omitempty"`
+	RegionName string           `json:"regionName,omitempty"`
+	Nodes      []ACLDERPNodeDoc `json:"nodes,omitempty"`
 }
 
 // ACLDERPMapDoc duplicates tsclient.ACLDERPMap for Swag docs.
 // The real type has Regions map[int]*ACLDERPRegion, so we do a doc-friendly version.
 type ACLDERPMapDoc struct {
-	Regions map[int]ACLDERPRegionDoc `json:"regions,omitempty"`
+	OmitDefaultRegions bool                          `json:"omitDefaultRegions,omitempty"`
+	Regions            map[int]ACLDERPRegionDoc      `json:"regions,omitempty"`
 }
 
 // RegisterRoutes wires up the /derpmap endpoints.
@@ -57,7 +68,7 @@ func RegisterRoutes(r *gin.Engine, state *common.State) {
 
 // getDERPMap => GET /derpmap
 // @Summary      Get DERP map
-// @Description  Returns the entire ACLDERPMap if it exists, else returns an empty doc or 404.
+// @Description  Returns the entire ACLDERPMap if it exists, else returns 404.
 // @Tags         DERPMap
 // @Accept       json
 // @Produce      json
@@ -71,10 +82,7 @@ func getDERPMap(c *gin.Context, state *common.State) {
 		return
 	}
 	if dm == nil {
-		// Return an empty doc (or 404 if you prefer).
-		c.JSON(http.StatusOK, ACLDERPMapDoc{
-			Regions: map[int]ACLDERPRegionDoc{},
-		})
+		c.JSON(http.StatusNotFound, ErrorResponse{Error: "No DERPMap found"})
 		return
 	}
 	c.JSON(http.StatusOK, convertDERPMapToDoc(*dm))
@@ -94,6 +102,8 @@ func getDERPMap(c *gin.Context, state *common.State) {
 // @Router       /derpmap [post]
 func createDERPMap(c *gin.Context, state *common.State) {
 	var newDMDoc ACLDERPMapDoc
+
+	
 	if err := c.ShouldBindJSON(&newDMDoc); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
@@ -201,37 +211,65 @@ func getDERPMapFromState(state *common.State) (*tsclient.ACLDERPMap, error) {
 
 // convertDERPMapToDoc transforms the real tsclient.ACLDERPMap into ACLDERPMapDoc.
 func convertDERPMapToDoc(dm tsclient.ACLDERPMap) ACLDERPMapDoc {
-	// Convert each region pointer into a doc. For safety, handle nil checks.
 	docRegions := make(map[int]ACLDERPRegionDoc, len(dm.Regions))
-	for regionID, regionPtr := range dm.Regions {
+	for rID, regionPtr := range dm.Regions {
 		if regionPtr == nil {
-			// If any region pointer is nil, skip or treat as empty doc.
-			docRegions[regionID] = ACLDERPRegionDoc{}
+			docRegions[rID] = ACLDERPRegionDoc{}
 			continue
 		}
-		docRegions[regionID] = ACLDERPRegionDoc{
-			RegionID:   regionID, // or regionPtr.ID if that exists
+		var docNodes []ACLDERPNodeDoc
+		for _, nodePtr := range regionPtr.Nodes {
+			if nodePtr == nil {
+				continue
+			}
+			docNodes = append(docNodes, ACLDERPNodeDoc{
+				Name:     nodePtr.Name,
+				RegionID: nodePtr.RegionID,
+				HostName: nodePtr.HostName,
+				IPv4:     nodePtr.IPv4,
+				IPv6:     nodePtr.IPv6,
+			})
+		}
+		docRegions[rID] = ACLDERPRegionDoc{
+			RegionID:   rID, // Reflect the map key
 			RegionCode: regionPtr.RegionCode,
-			// Add more fields if needed from tsclient.ACLDERPRegion
+			RegionName: regionPtr.RegionName,
+			Nodes:      docNodes,
 		}
 	}
 	return ACLDERPMapDoc{
-		Regions: docRegions,
+		OmitDefaultRegions: dm.OmitDefaultRegions,
+		Regions:            docRegions,
 	}
 }
 
 // convertDocToDERPMap transforms ACLDERPMapDoc into the real tsclient.ACLDERPMap.
 func convertDocToDERPMap(doc ACLDERPMapDoc) tsclient.ACLDERPMap {
-	realRegions := make(map[int]*tsclient.ACLDERPRegion, len(doc.Regions))
-	for regionID, docRegion := range doc.Regions {
-		// Convert doc region into a pointer for the real map
-		realRegions[regionID] = &tsclient.ACLDERPRegion{
-			RegionCode: docRegion.RegionCode,
-			// If there's a field for "RegionID" in the real struct, set it here
-			// or rely on the regionID map key if Tailscale does so.
-		}
-	}
-	return tsclient.ACLDERPMap{
-		Regions: realRegions,
-	}
+    realRegions := make(map[int]*tsclient.ACLDERPRegion, len(doc.Regions))
+    for rID, docRegion := range doc.Regions {
+        var realNodes []*tsclient.ACLDERPNode
+        for _, n := range docRegion.Nodes {
+            realNodes = append(realNodes, &tsclient.ACLDERPNode{
+                Name:     n.Name,
+                RegionID: n.RegionID,
+                HostName: n.HostName,
+                IPv4:     n.IPv4,
+                IPv6:     n.IPv6,
+            })
+        }
+
+        realRegions[rID] = &tsclient.ACLDERPRegion{
+            // This line ensures regionID won't be zero in the Tailscale struct:
+            RegionID:   rID,
+
+            RegionCode: docRegion.RegionCode,
+            RegionName: docRegion.RegionName,
+            Nodes:      realNodes,
+        }
+    }
+    return tsclient.ACLDERPMap{
+        OmitDefaultRegions: doc.OmitDefaultRegions,
+        Regions:            realRegions,
+    }
 }
+
