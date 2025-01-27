@@ -15,7 +15,6 @@ type ErrorResponse struct {
 }
 
 // Group is the user-facing structure describing a group of members.
-// @Description A Group has a required Name and a list of Members.
 type Group struct {
 	// Name is the unique name of the group (e.g., "engineering").
 	Name string `json:"name" binding:"required"`
@@ -30,8 +29,6 @@ type DeleteGroupRequest struct {
 }
 
 // RegisterRoutes wires up the /groups endpoints.
-// The underlying data is stored in state.Data["groups"] as
-// a map["group:<Name>"] => []string (members). We convert that map to/from an array of Group.
 func RegisterRoutes(r *gin.Engine, state *common.State) {
 	g := r.Group("/groups")
 	{
@@ -53,15 +50,7 @@ func RegisterRoutes(r *gin.Engine, state *common.State) {
 	}
 }
 
-// listGroups => GET /groups => returns entire []Group
-// @Summary      List all groups
-// @Description  Returns an array of Groups. Each group has a name and members.
-// @Tags         Groups
-// @Accept       json
-// @Produce      json
-// @Success      200 {array}  Group
-// @Failure      500 {object} ErrorResponse "Failed to parse groups"
-// @Router       /groups [get]
+// listGroups => GET /groups
 func listGroups(c *gin.Context, state *common.State) {
 	groups, err := getGroupsFromState(state)
 	if err != nil {
@@ -72,16 +61,6 @@ func listGroups(c *gin.Context, state *common.State) {
 }
 
 // getGroupByName => GET /groups/:name
-// @Summary      Get group by name
-// @Description  Retrieves a specific group by its name (e.g. "engineering").
-// @Tags         Groups
-// @Accept       json
-// @Produce      json
-// @Param        name  path      string  true "Group name"
-// @Success      200   {object}  Group
-// @Failure      404   {object}  ErrorResponse "Group not found"
-// @Failure      500   {object}  ErrorResponse "Failed to parse groups"
-// @Router       /groups/{name} [get]
 func getGroupByName(c *gin.Context, state *common.State) {
 	name := c.Param("name")
 
@@ -101,17 +80,6 @@ func getGroupByName(c *gin.Context, state *common.State) {
 }
 
 // createGroup => POST /groups
-// @Summary      Create a new group
-// @Description  Creates a group with a unique name. Returns 409 if the group name already exists.
-// @Tags         Groups
-// @Accept       json
-// @Produce      json
-// @Param        group body Group true "Group to create"
-// @Success      201 {object} Group
-// @Failure      400 {object} ErrorResponse "Bad request or missing name"
-// @Failure      409 {object} ErrorResponse "Group already exists"
-// @Failure      500 {object} ErrorResponse "Failed to parse or save groups"
-// @Router       /groups [post]
 func createGroup(c *gin.Context, state *common.State) {
 	var newGroup Group
 	if err := c.ShouldBindJSON(&newGroup); err != nil {
@@ -129,7 +97,6 @@ func createGroup(c *gin.Context, state *common.State) {
 		return
 	}
 
-	// Check if a group with the same name already exists => 409 Conflict
 	for _, g := range groups {
 		if g.Name == newGroup.Name {
 			c.JSON(http.StatusConflict, ErrorResponse{Error: "Group already exists"})
@@ -147,17 +114,6 @@ func createGroup(c *gin.Context, state *common.State) {
 }
 
 // updateGroup => PUT /groups
-// @Summary      Update an existing group
-// @Description  Updates the group's members by matching on the group name. Returns 404 if not found.
-// @Tags         Groups
-// @Accept       json
-// @Produce      json
-// @Param        group body Group true "Group with updated members"
-// @Success      200 {object} Group
-// @Failure      400 {object} ErrorResponse "Bad request or missing name"
-// @Failure      404 {object} ErrorResponse "Group not found"
-// @Failure      500 {object} ErrorResponse "Failed to update group"
-// @Router       /groups [put]
 func updateGroup(c *gin.Context, state *common.State) {
 	var updated Group
 	if err := c.ShouldBindJSON(&updated); err != nil {
@@ -196,17 +152,6 @@ func updateGroup(c *gin.Context, state *common.State) {
 }
 
 // deleteGroup => DELETE /groups
-// @Summary      Delete a group
-// @Description  Deletes a group by name. Expects a JSON body with { "name": "groupName" }.
-// @Tags         Groups
-// @Accept       json
-// @Produce      json
-// @Param        body  body      DeleteGroupRequest true "Delete group request"
-// @Success      200   {object}  map[string]string   "Group deleted"
-// @Failure      400   {object}  ErrorResponse       "Bad request or missing name"
-// @Failure      404   {object}  ErrorResponse       "Group not found"
-// @Failure      500   {object}  ErrorResponse       "Failed to save changes"
-// @Router       /groups [delete]
 func deleteGroup(c *gin.Context, state *common.State) {
 	var req DeleteGroupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -244,11 +189,6 @@ func deleteGroup(c *gin.Context, state *common.State) {
 	c.JSON(http.StatusOK, gin.H{"message": "Group deleted"})
 }
 
-// -----------------------------------------------------------------------------
-// The internal storage format is map["group:<Name>"] => []string (members).
-// We convert that map to/from []Group for the user-facing API.
-// -----------------------------------------------------------------------------
-
 // getGroupsFromState => read the map => convert to []Group
 func getGroupsFromState(state *common.State) ([]Group, error) {
 	raw := state.GetValue("groups")
@@ -259,16 +199,13 @@ func getGroupsFromState(state *common.State) ([]Group, error) {
 	if err != nil {
 		return nil, err
 	}
-	// final stored data: map["group:<Name>"] => []string (members)
 	var rawMap map[string][]string
 	if err := json.Unmarshal(b, &rawMap); err != nil {
 		return nil, err
 	}
 
-	// Convert map => array
 	var out []Group
 	for fullKey, members := range rawMap {
-		// strip "group:" if present
 		name := strings.TrimPrefix(fullKey, "group:")
 		out = append(out, Group{
 			Name:    name,
