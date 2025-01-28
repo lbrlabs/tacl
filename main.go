@@ -15,9 +15,8 @@ import (
 	"github.com/gin-gonic/gin"
 
 	_ "github.com/lbrlabs/tacl/swagger"
-    ginSwagger "github.com/swaggo/gin-swagger"
-    swaggerFiles "github.com/swaggo/files"
-
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 
 	// Existing route packages
 	"github.com/lbrlabs/tacl/pkg/acl/acls"
@@ -30,6 +29,7 @@ import (
 	"github.com/lbrlabs/tacl/pkg/acl/postures"
 	"github.com/lbrlabs/tacl/pkg/acl/settings"
 	"github.com/lbrlabs/tacl/pkg/acl/ssh"
+	"github.com/lbrlabs/tacl/pkg/acl/tagowners"
 	"github.com/lbrlabs/tacl/pkg/cap"
 	"github.com/lbrlabs/tacl/pkg/common"
 	"github.com/lbrlabs/tacl/pkg/sync"
@@ -290,6 +290,7 @@ func runMain(cli *CLI, serve *ServeCmd) {
 	nodeattrs.RegisterRoutes(r, state)
 	hosts.RegisterRoutes(r, state)
 	postures.RegisterRoutes(r, state)
+	tagowners.RegisterRoutes(r, state)
 
 
 	// swagger endpoints

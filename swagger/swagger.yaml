@@ -157,47 +157,43 @@ definitions:
     type: object
   derpmap.ACLDERPMapDoc:
     properties:
+      omitDefaultRegions:
+        type: boolean
       regions:
         additionalProperties:
           $ref: '#/definitions/derpmap.ACLDERPRegionDoc'
         type: object
     type: object
+  derpmap.ACLDERPNodeDoc:
+    properties:
+      hostName:
+        type: string
+      ipv4:
+        type: string
+      ipv6:
+        type: string
+      name:
+        type: string
+      regionID:
+        type: integer
+    type: object
   derpmap.ACLDERPRegionDoc:
     properties:
+      nodes:
+        items:
+          $ref: '#/definitions/derpmap.ACLDERPNodeDoc'
+        type: array
       regionCode:
         type: string
       regionID:
         type: integer
+      regionName:
+        type: string
     type: object
   derpmap.ErrorResponse:
     properties:
       error:
         type: string
-    type: object
-  groups.DeleteGroupRequest:
-    properties:
-      name:
-        type: string
-    type: object
-  groups.ErrorResponse:
-    properties:
-      error:
-        type: string
-    type: object
-  groups.Group:
-    description: A Group has a required Name and a list of Members.
-    properties:
-      members:
-        description: Members is the list of user identifiers or tags belonging to
-          this group.
-        items:
-          type: string
-        type: array
-      name:
-        description: Name is the unique name of the group (e.g., "engineering").
-        type: string
-    required:
-    - name
     type: object
   hosts.DeleteHostRequest:
     properties:
@@ -919,8 +915,7 @@ paths:
     get:
       consumes:
       - application/json
-      description: Returns the entire ACLDERPMap if it exists, else returns an empty
-        doc or 404.
+      description: Returns the entire ACLDERPMap if it exists, else returns 404.
       produces:
       - application/json
       responses:
@@ -1002,160 +997,6 @@ paths:
       summary: Update an existing DERPMap
       tags:
       - DERPMap
-  /groups:
-    delete:
-      consumes:
-      - application/json
-      description: 'Deletes a group by name. Expects a JSON body with { "name": "groupName"
-        }.'
-      parameters:
-      - description: Delete group request
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/groups.DeleteGroupRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Group deleted
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "400":
-          description: Bad request or missing name
-          schema:
-            $ref: '#/definitions/groups.ErrorResponse'
-        "404":
-          description: Group not found
-          schema:
-            $ref: '#/definitions/groups.ErrorResponse'
-        "500":
-          description: Failed to save changes
-          schema:
-            $ref: '#/definitions/groups.ErrorResponse'
-      summary: Delete a group
-      tags:
-      - Groups
-    get:
-      consumes:
-      - application/json
-      description: Returns an array of Groups. Each group has a name and members.
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/groups.Group'
-            type: array
-        "500":
-          description: Failed to parse groups
-          schema:
-            $ref: '#/definitions/groups.ErrorResponse'
-      summary: List all groups
-      tags:
-      - Groups
-    post:
-      consumes:
-      - application/json
-      description: Creates a group with a unique name. Returns 409 if the group name
-        already exists.
-      parameters:
-      - description: Group to create
-        in: body
-        name: group
-        required: true
-        schema:
-          $ref: '#/definitions/groups.Group'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/groups.Group'
-        "400":
-          description: Bad request or missing name
-          schema:
-            $ref: '#/definitions/groups.ErrorResponse'
-        "409":
-          description: Group already exists
-          schema:
-            $ref: '#/definitions/groups.ErrorResponse'
-        "500":
-          description: Failed to parse or save groups
-          schema:
-            $ref: '#/definitions/groups.ErrorResponse'
-      summary: Create a new group
-      tags:
-      - Groups
-    put:
-      consumes:
-      - application/json
-      description: Updates the group's members by matching on the group name. Returns
-        404 if not found.
-      parameters:
-      - description: Group with updated members
-        in: body
-        name: group
-        required: true
-        schema:
-          $ref: '#/definitions/groups.Group'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/groups.Group'
-        "400":
-          description: Bad request or missing name
-          schema:
-            $ref: '#/definitions/groups.ErrorResponse'
-        "404":
-          description: Group not found
-          schema:
-            $ref: '#/definitions/groups.ErrorResponse'
-        "500":
-          description: Failed to update group
-          schema:
-            $ref: '#/definitions/groups.ErrorResponse'
-      summary: Update an existing group
-      tags:
-      - Groups
-  /groups/{name}:
-    get:
-      consumes:
-      - application/json
-      description: Retrieves a specific group by its name (e.g. "engineering").
-      parameters:
-      - description: Group name
-        in: path
-        name: name
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/groups.Group'
-        "404":
-          description: Group not found
-          schema:
-            $ref: '#/definitions/groups.ErrorResponse'
-        "500":
-          description: Failed to parse groups
-          schema:
-            $ref: '#/definitions/groups.ErrorResponse'
-      summary: Get group by name
-      tags:
-      - Groups
   /hosts:
     delete:
       consumes:
@@ -1948,42 +1789,7 @@ paths:
       summary: Get SSH rule by ID
       tags:
       - SSH
-  /tagowners:
-    delete:
-      consumes:
-      - application/json
-      description: 'Expects JSON: { "name": "webserver" } to remove the matching TagOwner.'
-      parameters:
-      - description: Delete TagOwner request
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/tagowners.deleteTagOwnerRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: TagOwner deleted
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "400":
-          description: Bad request or missing name
-          schema:
-            $ref: '#/definitions/tagowners.ErrorResponse'
-        "404":
-          description: TagOwner not found
-          schema:
-            $ref: '#/definitions/tagowners.ErrorResponse'
-        "500":
-          description: Failed to save changes
-          schema:
-            $ref: '#/definitions/tagowners.ErrorResponse'
-      summary: Delete a tag owner
-      tags:
-      - TagOwners
+  /tagOwners:
     get:
       consumes:
       - application/json
@@ -2071,7 +1877,7 @@ paths:
       summary: Update a tag owner
       tags:
       - TagOwners
-  /tagowners/{name}:
+  /tagOwners/{name}:
     get:
       consumes:
       - application/json
@@ -2098,6 +1904,42 @@ paths:
           schema:
             $ref: '#/definitions/tagowners.ErrorResponse'
       summary: Get a tag owner by name
+      tags:
+      - TagOwners
+  /tagowners:
+    delete:
+      consumes:
+      - application/json
+      description: 'Expects JSON: { "name": "webserver" } to remove the matching TagOwner.'
+      parameters:
+      - description: Delete TagOwner request
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/tagowners.deleteTagOwnerRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: TagOwner deleted
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad request or missing name
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+        "404":
+          description: TagOwner not found
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+        "500":
+          description: Failed to save changes
+          schema:
+            $ref: '#/definitions/tagowners.ErrorResponse'
+      summary: Delete a tag owner
       tags:
       - TagOwners
 swagger: "2.0"

@@ -60,7 +60,7 @@ func RegisterRoutes(r *gin.Engine, state *common.State) {
 	}
 }
 
-// listTagOwners => GET /tagowners
+// listTagOwners => GET /tagOwners
 // @Summary      List all tag owners
 // @Description  Returns an array of TagOwner objects from state.
 // @Tags         TagOwners
@@ -68,7 +68,7 @@ func RegisterRoutes(r *gin.Engine, state *common.State) {
 // @Produce      json
 // @Success      200 {array}  TagOwner
 // @Failure      500 {object} ErrorResponse "Failed to parse tagOwners"
-// @Router       /tagowners [get]
+// @Router       /tagOwners [get]
 func listTagOwners(c *gin.Context, state *common.State) {
 	tagOwners, err := getTagOwnersFromState(state)
 	if err != nil {
@@ -78,7 +78,7 @@ func listTagOwners(c *gin.Context, state *common.State) {
 	c.JSON(http.StatusOK, tagOwners)
 }
 
-// getTagOwnerByName => GET /tagowners/:name
+// getTagOwnerByName => GET /tagOwners/:name
 // @Summary      Get a tag owner by name
 // @Description  Retrieves the TagOwner with the given name.
 // @Tags         TagOwners
@@ -88,7 +88,7 @@ func listTagOwners(c *gin.Context, state *common.State) {
 // @Success      200 {object} TagOwner
 // @Failure      404 {object} ErrorResponse "TagOwner not found"
 // @Failure      500 {object} ErrorResponse "Failed to parse tagOwners"
-// @Router       /tagowners/{name} [get]
+// @Router       /tagOwners/{name} [get]
 func getTagOwnerByName(c *gin.Context, state *common.State) {
 	name := c.Param("name")
 
@@ -107,7 +107,7 @@ func getTagOwnerByName(c *gin.Context, state *common.State) {
 	c.JSON(http.StatusNotFound, ErrorResponse{Error: "TagOwner not found"})
 }
 
-// createTagOwner => POST /tagowners
+// createTagOwner => POST /tagOwners
 // @Summary      Create a new tag owner
 // @Description  Creates a TagOwner. Returns 409 if name already exists.
 // @Tags         TagOwners
@@ -118,7 +118,7 @@ func getTagOwnerByName(c *gin.Context, state *common.State) {
 // @Failure      400 {object} ErrorResponse "Bad request or missing name"
 // @Failure      409 {object} ErrorResponse "TagOwner already exists"
 // @Failure      500 {object} ErrorResponse "Failed to parse or save tagOwners"
-// @Router       /tagowners [post]
+// @Router       /tagOwners [post]
 func createTagOwner(c *gin.Context, state *common.State) {
 	var newTag TagOwner
 	if err := c.ShouldBindJSON(&newTag); err != nil {
@@ -152,7 +152,7 @@ func createTagOwner(c *gin.Context, state *common.State) {
 	c.JSON(http.StatusCreated, newTag)
 }
 
-// updateTagOwner => PUT /tagowners
+// updateTagOwner => PUT /tagOwners
 // @Summary      Update a tag owner
 // @Description  Updates the TagOwner with a matching name. Expects JSON: { "name": "...", "owners": [...] }.
 // @Tags         TagOwners
@@ -163,7 +163,7 @@ func createTagOwner(c *gin.Context, state *common.State) {
 // @Failure      400 {object} ErrorResponse "Bad request or missing name"
 // @Failure      404 {object} ErrorResponse "TagOwner not found"
 // @Failure      500 {object} ErrorResponse "Failed to parse or save changes"
-// @Router       /tagowners [put]
+// @Router       /tagOwners [put]
 func updateTagOwner(c *gin.Context, state *common.State) {
 	var updated TagOwner
 	if err := c.ShouldBindJSON(&updated); err != nil {

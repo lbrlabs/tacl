@@ -636,7 +636,7 @@ const docTemplate = `{
         },
         "/derpmap": {
             "get": {
-                "description": "Returns the entire ACLDERPMap if it exists, else returns an empty doc or 404.",
+                "description": "Returns the entire ACLDERPMap if it exists, else returns 404.",
                 "consumes": [
                     "application/json"
                 ],
@@ -794,235 +794,6 @@ const docTemplate = `{
                         "description": "Failed to delete DERPMap",
                         "schema": {
                             "$ref": "#/definitions/derpmap.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/groups": {
-            "get": {
-                "description": "Returns an array of Groups. Each group has a name and members.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Groups"
-                ],
-                "summary": "List all groups",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/groups.Group"
-                            }
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to parse groups",
-                        "schema": {
-                            "$ref": "#/definitions/groups.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "description": "Updates the group's members by matching on the group name. Returns 404 if not found.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Groups"
-                ],
-                "summary": "Update an existing group",
-                "parameters": [
-                    {
-                        "description": "Group with updated members",
-                        "name": "group",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/groups.Group"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/groups.Group"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request or missing name",
-                        "schema": {
-                            "$ref": "#/definitions/groups.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Group not found",
-                        "schema": {
-                            "$ref": "#/definitions/groups.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to update group",
-                        "schema": {
-                            "$ref": "#/definitions/groups.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "description": "Creates a group with a unique name. Returns 409 if the group name already exists.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Groups"
-                ],
-                "summary": "Create a new group",
-                "parameters": [
-                    {
-                        "description": "Group to create",
-                        "name": "group",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/groups.Group"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/groups.Group"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request or missing name",
-                        "schema": {
-                            "$ref": "#/definitions/groups.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Group already exists",
-                        "schema": {
-                            "$ref": "#/definitions/groups.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to parse or save groups",
-                        "schema": {
-                            "$ref": "#/definitions/groups.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "description": "Deletes a group by name. Expects a JSON body with { \"name\": \"groupName\" }.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Groups"
-                ],
-                "summary": "Delete a group",
-                "parameters": [
-                    {
-                        "description": "Delete group request",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/groups.DeleteGroupRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Group deleted",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad request or missing name",
-                        "schema": {
-                            "$ref": "#/definitions/groups.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Group not found",
-                        "schema": {
-                            "$ref": "#/definitions/groups.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to save changes",
-                        "schema": {
-                            "$ref": "#/definitions/groups.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/groups/{name}": {
-            "get": {
-                "description": "Retrieves a specific group by its name (e.g. \"engineering\").",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Groups"
-                ],
-                "summary": "Get group by name",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Group name",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/groups.Group"
-                        }
-                    },
-                    "404": {
-                        "description": "Group not found",
-                        "schema": {
-                            "$ref": "#/definitions/groups.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to parse groups",
-                        "schema": {
-                            "$ref": "#/definitions/groups.ErrorResponse"
                         }
                     }
                 }
@@ -2209,7 +1980,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/tagowners": {
+        "/tagOwners": {
             "get": {
                 "description": "Returns an array of TagOwner objects from state.",
                 "consumes": [
@@ -2339,7 +2110,53 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
+            }
+        },
+        "/tagOwners/{name}": {
+            "get": {
+                "description": "Retrieves the TagOwner with the given name.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "TagOwners"
+                ],
+                "summary": "Get a tag owner by name",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tag name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.TagOwner"
+                        }
+                    },
+                    "404": {
+                        "description": "TagOwner not found",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to parse tagOwners",
+                        "schema": {
+                            "$ref": "#/definitions/tagowners.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/tagowners": {
             "delete": {
                 "description": "Expects JSON: { \"name\": \"webserver\" } to remove the matching TagOwner.",
                 "consumes": [
@@ -2387,50 +2204,6 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Failed to save changes",
-                        "schema": {
-                            "$ref": "#/definitions/tagowners.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/tagowners/{name}": {
-            "get": {
-                "description": "Retrieves the TagOwner with the given name.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "TagOwners"
-                ],
-                "summary": "Get a tag owner by name",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Tag name",
-                        "name": "name",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/tagowners.TagOwner"
-                        }
-                    },
-                    "404": {
-                        "description": "TagOwner not found",
-                        "schema": {
-                            "$ref": "#/definitions/tagowners.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Failed to parse tagOwners",
                         "schema": {
                             "$ref": "#/definitions/tagowners.ErrorResponse"
                         }
@@ -2658,6 +2431,9 @@ const docTemplate = `{
         "derpmap.ACLDERPMapDoc": {
             "type": "object",
             "properties": {
+                "omitDefaultRegions": {
+                    "type": "boolean"
+                },
                 "regions": {
                     "type": "object",
                     "additionalProperties": {
@@ -2666,10 +2442,19 @@ const docTemplate = `{
                 }
             }
         },
-        "derpmap.ACLDERPRegionDoc": {
+        "derpmap.ACLDERPNodeDoc": {
             "type": "object",
             "properties": {
-                "regionCode": {
+                "hostName": {
+                    "type": "string"
+                },
+                "ipv4": {
+                    "type": "string"
+                },
+                "ipv6": {
+                    "type": "string"
+                },
+                "name": {
                     "type": "string"
                 },
                 "regionID": {
@@ -2677,46 +2462,30 @@ const docTemplate = `{
                 }
             }
         },
+        "derpmap.ACLDERPRegionDoc": {
+            "type": "object",
+            "properties": {
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/derpmap.ACLDERPNodeDoc"
+                    }
+                },
+                "regionCode": {
+                    "type": "string"
+                },
+                "regionID": {
+                    "type": "integer"
+                },
+                "regionName": {
+                    "type": "string"
+                }
+            }
+        },
         "derpmap.ErrorResponse": {
             "type": "object",
             "properties": {
                 "error": {
-                    "type": "string"
-                }
-            }
-        },
-        "groups.DeleteGroupRequest": {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string"
-                }
-            }
-        },
-        "groups.ErrorResponse": {
-            "type": "object",
-            "properties": {
-                "error": {
-                    "type": "string"
-                }
-            }
-        },
-        "groups.Group": {
-            "description": "A Group has a required Name and a list of Members.",
-            "type": "object",
-            "required": [
-                "name"
-            ],
-            "properties": {
-                "members": {
-                    "description": "Members is the list of user identifiers or tags belonging to this group.",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "name": {
-                    "description": "Name is the unique name of the group (e.g., \"engineering\").",
                     "type": "string"
                 }
             }
