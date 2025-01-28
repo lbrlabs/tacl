@@ -40,11 +40,18 @@ type ExtendedSSHEntry struct {
 	ACLSSH
 }
 
+// UpdateRequest represents the JSON body for PUT /ssh:
+// {
+//   "id": "<uuid>",
+//   "rule": { "action":"check","src":["tag:x"], ... }
+// }
 type UpdateRequest struct {
 	ID   string `json:"id"`
 	Rule ACLSSH `json:"rule"`
 }
 
+// DeleteRequest represents the JSON body for DELETE /ssh:
+// { "id":"<uuid>" }
 type DeleteRequest struct {
 	ID string `json:"id"`
 }
@@ -165,8 +172,10 @@ func createSSH(c *gin.Context, state *common.State) {
 		ACLSSH: newRule,
 	}
 
+	// Append to the "ssh" array
 	entries = append(entries, newEntry)
-	if err := state.UpdateKeyAndSave("sshRules", entries); err != nil {
+
+	if err := state.UpdateKeyAndSave("ssh", entries); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to save new SSH rule"})
 		return
 	}
@@ -186,7 +195,6 @@ func createSSH(c *gin.Context, state *common.State) {
 // @Failure      500 {object} ErrorResponse "Failed to parse or update SSH rule"
 // @Router       /ssh [put]
 func updateSSH(c *gin.Context, state *common.State) {
-
 	var req UpdateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
@@ -232,7 +240,7 @@ func updateSSH(c *gin.Context, state *common.State) {
 		return
 	}
 
-	if err := state.UpdateKeyAndSave("sshRules", entries); err != nil {
+	if err := state.UpdateKeyAndSave("ssh", entries); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to update SSH rule"})
 		return
 	}
@@ -252,7 +260,6 @@ func updateSSH(c *gin.Context, state *common.State) {
 // @Failure      500 {object} ErrorResponse "Failed to delete SSH rule"
 // @Router       /ssh [delete]
 func deleteSSH(c *gin.Context, state *common.State) {
-	
 	var req DeleteRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
@@ -283,16 +290,16 @@ func deleteSSH(c *gin.Context, state *common.State) {
 		return
 	}
 
-	if err := state.UpdateKeyAndSave("sshRules", newList); err != nil {
+	if err := state.UpdateKeyAndSave("ssh", newList); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to delete SSH rule"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "SSH rule deleted"})
 }
 
-// getSSHFromState => re-marshal state.Data["sshRules"] into []ExtendedSSHEntry
+// getSSHFromState => re-marshal state.Data["ssh"] into []ExtendedSSHEntry
 func getSSHFromState(state *common.State) ([]ExtendedSSHEntry, error) {
-	raw := state.GetValue("sshRules")
+	raw := state.GetValue("ssh")
 	if raw == nil {
 		return []ExtendedSSHEntry{}, nil
 	}
